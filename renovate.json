@@ -5,5 +5,15 @@
   ],
   "lockFileMaintenance": {
     "enabled": true
-  }
+  },
+  "packageRules": [
+    {
+      "description": "The Playwright package and the image of the visual tests must move together: the package drives the browsers of the image.",
+      "matchDepNames": [
+        "playwright",
+        "mcr.microsoft.com/playwright"
+      ],
+      "groupName": "playwright"
+    }
+  ]
 }

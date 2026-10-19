@@ -10,7 +10,13 @@ uv run ruff check .                            # lint
 uv run ruff format --check .                   # format check
 uv run mypy repoboard tests                    # type check
 uv run pytest --cov --cov-report=term-missing  # tests with coverage
+scripts/visual-tests.sh                        # screenshot tests in the Playwright image (Docker)
+scripts/visual-tests.sh --update               # accept new screenshots after a UI change
 ```
+
+The visual tests compare every view with `tests/visual/snapshots`. They run only in the pinned
+Playwright image, because fonts render differently on each system. A failure leaves the actual and
+diff images in `tests/visual/output`. Review the new screenshots before you commit them.
 
 CI runs lint, type check, tests and SonarCloud for every pull request.
 

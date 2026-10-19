@@ -46,3 +46,6 @@ htmlcov/
 
 # Ruff
 .ruff_cache/
+
+# Visual test failures
+tests/visual/output/
