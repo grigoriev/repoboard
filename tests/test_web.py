@@ -174,3 +174,10 @@ def test_rejects_foreign_host_and_origin(poller: Poller, base: str, headers: dic
 
 def test_accepts_local_origin(client: TestClient) -> None:
     assert client.post("/seen-all", headers={"origin": "http://localhost:8765"}).status_code == 200
+
+
+def test_status_link_survives_url_decoding(client: TestClient, poller: Poller) -> None:
+    poller.store.set_setting("last_poll", NOW.isoformat())
+    page = client.get("/status").text
+    link = page.split('hx-get="', 1)[1].split('"', 1)[0]
+    assert "HX-Refresh" not in client.get(link.replace("&amp;", "&")).headers
