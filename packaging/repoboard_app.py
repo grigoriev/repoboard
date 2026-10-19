@@ -1,5 +1,7 @@
 """Entry point of Repoboard.app. Without arguments the app runs in the menu bar."""
 
+from __future__ import annotations
+
 import sys
 
 from repoboard.cli import main

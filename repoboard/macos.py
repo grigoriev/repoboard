@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 import sys
 from importlib import resources
+
+log = logging.getLogger(__name__)
 
 
 def icon_path() -> str:
@@ -85,7 +88,7 @@ def set_open_at_login(enabled: bool) -> None:  # pragma: no cover - needs Servic
     from ServiceManagement import SMAppService
 
     service = SMAppService.mainAppService()
-    if enabled:
-        service.registerAndReturnError_(None)
-    else:
-        service.unregisterAndReturnError_(None)
+    ok, error = service.registerAndReturnError_(None) if enabled else service.unregisterAndReturnError_(None)
+    if not ok:
+        # Registration can fail, or wait for approval in System Settings > General > Login Items.
+        log.warning("open at login: %s (status %s)", error, service.status())
