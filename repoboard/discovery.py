@@ -1,12 +1,12 @@
-"""Turn the owners of the config into repositories: list them through gh and filter them."""
+"""List the repositories of an owner through gh and filter them by the owner's rules."""
 
 from __future__ import annotations
 
 import fnmatch
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-from repoboard.config import Config, Owner
+from repoboard.config import Owner
 from repoboard.gh import Gh, GhError
 
 
@@ -26,13 +26,6 @@ class RepoInfo:
             "public": not node.get("private"),
         }
         return cls(str(node["full_name"]), frozenset(kind for kind, on in flags.items() if on))
-
-
-@dataclass(frozen=True)
-class Resolved:
-    repos: tuple[str, ...]  # the owners' repositories and the single ones together
-    errors: dict[str, str] = field(default_factory=dict)  # owner -> why it could not be listed
-    listed: tuple[str, ...] = ()  # only what the owners listed, a single repository included
 
 
 def matches(owner: Owner, info: RepoInfo) -> bool:
@@ -59,23 +52,3 @@ def list_owner(gh: Gh, owner: str, viewer: str) -> list[RepoInfo]:
             raise
         nodes = gh.paginate(f"users/{owner}/repos?type=owner&per_page=100")
     return [RepoInfo.from_api(node) for node in nodes]
-
-
-def resolve(gh: Gh, config: Config, viewer: str) -> Resolved:
-    """The repositories to poll: the matching repositories of every owner, plus the single ones."""
-    # GitHub names ignore case. Keyed by the lower case name, the spelling of the config wins.
-    repos = {repo.lower(): repo for repo in config.repos}
-    listed_by_owners: dict[str, str] = {}
-    errors: dict[str, str] = {}
-    for owner in config.owners:
-        try:
-            listed = [info.name for info in list_owner(gh, owner.name, viewer) if matches(owner, info)]
-        except GhError as exc:
-            errors[owner.name] = str(exc)
-            continue
-        for name in listed:
-            repos.setdefault(name.lower(), name)
-            listed_by_owners.setdefault(name.lower(), repos[name.lower()])
-    return Resolved(
-        tuple(sorted(repos.values(), key=str.lower)), errors, tuple(sorted(listed_by_owners.values(), key=str.lower))
-    )

@@ -285,7 +285,7 @@ def test_changed_owners_drop_the_cached_listing(store: Store) -> None:
     poller.poll()
     assert poller.repos() == ("acme/a", "acme/b")
     poller.config = Config(owners=(Owner("acme", exclude=("b",)),))
-    assert poller.repos() == ()  # the old listing no longer applies
+    assert poller.repos() == ("acme/a", "acme/b")  # until the next poll lists acme with the new filter
     poller.poll()
     assert poller.repos() == ("acme/a",)
 
@@ -344,4 +344,89 @@ def test_a_single_repository_handed_over_to_its_owner_stays(store: Store) -> Non
     clock.now = NOW + timedelta(hours=2)
     poller.poll()
     assert poller.repos() == ("acme/tool",)
+    assert added == []
+
+
+def flaky_listing(answer: list[Any]) -> Any:
+    def listing(call: list[str]) -> Any:
+        if isinstance(answer[0], GhError):
+            raise answer[0]
+        return answer[0]
+
+    return listing
+
+
+def test_an_owner_whose_first_listing_failed_announces_nothing_later(store: Store) -> None:
+    from repoboard.config import Owner
+
+    clock = Clock()
+    acme: list[Any] = [[[owner_repo("acme/a")]]]
+    beta: list[Any] = [GhError("timeout", 504)]
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": flaky_listing(acme), "orgs/beta/repos": flaky_listing(beta),
+         **empty_repo_routes()}
+    )  # fmt: skip
+    poller = Poller(Config(owners=(Owner("acme"), Owner("beta"))), store, Gh(runner), clock)
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    assert poller.discovery_errors() == {"beta": "timeout"}
+    beta[0] = [[owner_repo("beta/x"), owner_repo("beta/y")]]
+    clock.now = NOW + timedelta(hours=2)
+    poller.poll()
+    assert poller.repos() == ("acme/a", "beta/x", "beta/y")
+    assert added == []
+
+
+def test_editing_one_owner_keeps_the_listing_of_the_others(store: Store) -> None:
+    from repoboard.config import Owner
+
+    clock = Clock()
+    beta: list[Any] = [[[owner_repo("beta/x")]]]
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/a"), owner_repo("acme/b")]],
+         "orgs/beta/repos": flaky_listing(beta), **empty_repo_routes()}
+    )  # fmt: skip
+    poller = Poller(Config(owners=(Owner("acme"), Owner("beta"))), store, Gh(runner), clock)
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    beta[0] = GhError("timeout", 504)
+    poller.config = Config(owners=(Owner("acme", exclude=("b",)), Owner("beta")))
+    assert poller.repos() == ("acme/a", "acme/b", "beta/x")  # the old listing stays until acme is listed again
+    poller.poll()
+    assert poller.repos() == ("acme/a", "beta/x")
+    beta[0] = [[owner_repo("beta/x"), owner_repo("beta/new")]]
+    clock.now = NOW + timedelta(hours=2)
+    poller.poll()
+    assert added == [["beta/new"]]
+
+
+def test_an_edited_owner_that_fails_keeps_what_it_had(store: Store) -> None:
+    from repoboard.config import Owner
+
+    acme: list[Any] = [[[owner_repo("acme/a"), owner_repo("acme/b")]]]
+    runner = FakeGhRunner({"api user": {"login": "me"}, "orgs/acme/repos": flaky_listing(acme), **empty_repo_routes()})
+    poller = Poller(Config(owners=(Owner("acme"),)), store, Gh(runner), Clock())
+    poller.poll()
+    acme[0] = GhError("timeout", 504)
+    poller.config = Config(owners=(Owner("acme", exclude=("b",)),))
+    poller.poll()
+    assert poller.repos() == ("acme/a", "acme/b")
+
+
+def test_repositories_a_wider_filter_lets_in_are_not_news(store: Store) -> None:
+    from repoboard.config import Owner
+
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/a"), owner_repo("acme/b")]],
+         **empty_repo_routes()}
+    )  # fmt: skip
+    poller = Poller(Config(owners=(Owner("acme", exclude=("b",)),)), store, Gh(runner), Clock())
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    poller.config = Config(owners=(Owner("acme"),))
+    poller.poll()
+    assert poller.repos() == ("acme/a", "acme/b")
     assert added == []

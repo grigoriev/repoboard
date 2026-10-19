@@ -13,7 +13,7 @@ from typing import Any
 
 from repoboard.collector import Collector
 from repoboard.config import Config
-from repoboard.discovery import resolve
+from repoboard.discovery import list_owner, matches
 from repoboard.gh import Gh, GhError
 from repoboard.store import Entry, Store
 
@@ -59,45 +59,56 @@ class Poller:
         self._thread: threading.Thread | None = None
 
     def repos(self) -> tuple[str, ...]:
-        """The repositories to poll: the single ones of the config, plus what the owners last listed."""
+        """The repositories to poll: the single ones of the config, plus what each owner last listed."""
         single = {repo.lower() for repo in self.config.repos}
-        listed = [repo for repo in self._saved_listing().get("repos", []) if repo.lower() not in single]
-        return tuple(sorted([*self.config.repos, *listed], key=str.lower))
+        listed = {repo for entry in self._listings().values() for repo in entry["repos"]}
+        return tuple(sorted([*self.config.repos, *(r for r in listed if r.lower() not in single)], key=str.lower))
 
-    def _owners_key(self) -> str:
-        return json.dumps([dataclasses.astuple(owner) for owner in self.config.owners])
+    def _listings(self) -> dict[str, dict[str, Any]]:
+        """The last listing of each owner of the config, by lower case name.
 
-    def _saved_listing(self) -> dict[str, Any]:
-        """The last listing of the owners, or nothing when the owners in the config changed since."""
-        saved: dict[str, Any] = json.loads(self.store.get_setting("discovered") or "{}")
-        return saved if saved.get("owners") == self._owners_key() else {}
+        An entry: "rule" (the owner's filters as they were listed), "at", "repos" and "error". An entry
+        stays when its filters change, until the owner is listed again, so nothing flickers or is lost.
+        """
+        saved: dict[str, dict[str, Any]] = json.loads(self.store.get_setting("owner_listings") or "{}")
+        names = {owner.name.lower() for owner in self.config.owners}
+        return {name: entry for name, entry in saved.items() if name in names}
 
     def discovery_errors(self) -> dict[str, str]:
-        return dict(self._saved_listing().get("errors", {}))
+        listings = self._listings()
+        return {
+            owner.name: str(entry["error"])
+            for owner in self.config.owners
+            if (entry := listings.get(owner.name.lower())) and entry.get("error")
+        }
 
     def _discover(self, now: datetime) -> None:
-        if not self.config.owners:
-            return
-        saved = self._saved_listing()
-        if "at" in saved and now - datetime.fromisoformat(saved["at"]) < DISCOVERY_TTL:
-            return
-        assert self._me is not None
-        resolved = resolve(self.gh, self.config, self._me)
+        listings = self._listings()
         single = {repo.lower() for repo in self.config.repos}
-        # Keep every listed repository, a single one too: if it leaves `repos`, the owner still covers it.
-        kept = set(resolved.listed)
-        # An owner that could not be listed keeps what it had. Dropping it would delete its data now
-        # and announce all of it as new once the listing works again.
-        failed = {owner.lower() for owner in resolved.errors}
-        kept.update(repo for repo in saved.get("repos", []) if repo.split("/", 1)[0].lower() in failed)
-        owned = sorted(kept, key=str.lower)
-        listing = {"at": now.isoformat(), "owners": self._owners_key(), "repos": owned, "errors": resolved.errors}
-        self.store.set_setting("discovered", json.dumps(listing))
-        if "at" in saved:  # the first listing is the starting point, not news
-            known = {repo.lower() for repo in saved.get("repos", [])} | single
-            added = [repo for repo in owned if repo.lower() not in known]
-            for listener in self.repo_listeners if added else ():
-                listener(added)
+        added: list[str] = []
+        for owner in self.config.owners:
+            rule = json.dumps(dataclasses.astuple(owner))
+            entry = listings.get(owner.name.lower())
+            fresh = entry and entry["rule"] == rule and now - datetime.fromisoformat(entry["at"]) < DISCOVERY_TTL
+            if fresh:
+                continue
+            assert self._me is not None
+            try:
+                listed = [info.name for info in list_owner(self.gh, owner.name, self._me) if matches(owner, info)]
+            except GhError as exc:
+                # The owner keeps what it had: dropping it would delete its data and announce it all later.
+                kept = entry["repos"] if entry else []
+                listings[owner.name.lower()] = {"rule": entry["rule"] if entry else "", "at": now.isoformat(),
+                                                "repos": kept, "error": str(exc)}  # fmt: skip
+                continue
+            # News only under the same filters, after a good listing: not a first listing, not a wider filter.
+            if entry and entry["rule"] == rule:
+                known = {repo.lower() for repo in entry["repos"]} | single
+                added += [repo for repo in listed if repo.lower() not in known]
+            listings[owner.name.lower()] = {"rule": rule, "at": now.isoformat(), "repos": listed, "error": None}
+        self.store.set_setting("owner_listings", json.dumps(listings))
+        for listener in self.repo_listeners if added else ():
+            listener(sorted(added, key=str.lower))
 
     def last_poll(self) -> datetime | None:
         value = self.store.get_setting("last_poll")

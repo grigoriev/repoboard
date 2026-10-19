@@ -4,8 +4,8 @@ from typing import Any
 
 import pytest
 
-from repoboard.config import Config, Owner
-from repoboard.discovery import RepoInfo, list_owner, matches, resolve
+from repoboard.config import Owner
+from repoboard.discovery import RepoInfo, list_owner, matches
 from repoboard.gh import Gh, GhError
 from tests.fakes import FakeGhRunner
 
@@ -62,22 +62,3 @@ def test_list_owner_reports_other_errors() -> None:
     gh = Gh(FakeGhRunner({"orgs/acme/repos": GhError("boom", 500)}))
     with pytest.raises(GhError):
         list_owner(gh, "acme", viewer="me")
-
-
-def test_resolve_merges_owners_and_single_repos() -> None:
-    runner = FakeGhRunner(
-        {
-            "orgs/acme/repos": [[repo("acme/b"), repo("acme/a"), repo("acme/old", archived=True)]],
-            "orgs/broken/repos": GhError("boom", 500),
-        }
-    )
-    cfg = Config(repos=("cli/cli", "acme/b"), owners=(Owner("acme"), Owner("broken")))
-    result = resolve(Gh(runner), cfg, viewer="me")
-    assert result.repos == ("acme/a", "acme/b", "cli/cli")
-    assert result.errors == {"broken": "boom"}
-
-
-def test_resolve_ignores_case_and_keeps_the_config_spelling() -> None:
-    runner = FakeGhRunner({"orgs/acme/repos": [[repo("acme/tool")]]})
-    cfg = Config(repos=("Acme/Tool",), owners=(Owner("acme"),))
-    assert resolve(Gh(runner), cfg, viewer="me").repos == ("Acme/Tool",)
