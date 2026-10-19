@@ -159,7 +159,9 @@ def create_app(poller: Poller) -> FastAPI:
     ) -> HTMLResponse:
         if sort in SORT_COLUMNS and sort_dir in ("asc", "desc"):
             store.set_setting("overview_sort", f"{sort} {sort_dir}")
-        column, direction = (store.get_setting("overview_sort") or "repo asc").split(" ", 1)
+        column, _, direction = (store.get_setting("overview_sort") or "").partition(" ")
+        if column not in SORT_COLUMNS or direction not in ("asc", "desc"):
+            column, direction = "repo", "asc"
         rows = store.overview(config.repos, poller.clock())
         if org:
             rows = [row for row in rows if row.repo.startswith(f"{org}/")]

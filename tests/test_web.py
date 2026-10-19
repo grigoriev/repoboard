@@ -312,3 +312,11 @@ def test_sort_ties_stay_alphabetical() -> None:
 
     rows = [RepoRow(repo, None, None, failed=1) for repo in ("o/c", "o/a", "o/b")]
     assert [r.repo for r in sort_rows(rows, "failed", "desc")] == ["o/a", "o/b", "o/c"]
+
+
+@pytest.mark.parametrize("saved", ["garbage", "stars desc", "repo sideways"])
+def test_overview_survives_a_broken_saved_sort(poller: Poller, saved: str) -> None:
+    seed_overview(poller)
+    poller.store.set_setting("overview_sort", saved)
+    client = TestClient(create_app(poller), base_url="http://127.0.0.1")
+    assert overview_order(client) == ["a/bbb", "b/aaa", "c/ccc"]
