@@ -44,13 +44,15 @@
     });
   }
 
-  document.addEventListener("click", function (event) {
+  function opened(event) {
     var link = event.target.closest("a[data-key]");
-    if (!link) return;
+    if (!link || event.button > 1) return;
     post("/items/open", "key=" + encodeURIComponent(link.dataset.key)).then(function () {
       htmx.trigger(document.body, "repoboard-updated");
     });
-  });
+  }
+  document.addEventListener("click", opened);
+  document.addEventListener("auxclick", opened); // a middle click opens a tab without a click event
 
   var lastFocus = 0;
   function back() {
