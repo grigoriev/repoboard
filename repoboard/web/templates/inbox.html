@@ -3,7 +3,7 @@
 {% block main %}
 <div class="toolbar">
   <span class="since">
-    {%- if baseline %}{{ t("toolbar.since", time=baseline.strftime("%Y-%m-%d %H:%M")) }} · {% endif -%}
+    {%- if baseline %}{{ t("toolbar.since", time=baseline.astimezone().strftime("%Y-%m-%d %H:%M")) }} · {% endif -%}
     {{ t("toolbar.repos", count=repo_count) }}
   </span>
   <form method="post" action="/seen-all"><button class="btn" type="submit">{{ t("toolbar.seen_all") }}</button></form>

@@ -197,3 +197,12 @@ def test_page_reloads_after_the_first_poll(client: TestClient, poller: Poller) -
     assert "HX-Refresh" not in client.get(link).headers
     poller.store.set_setting("last_poll", NOW.isoformat())
     assert client.get(link).headers.get("HX-Refresh") == "true"
+
+
+def test_language_label_and_local_baseline(client: TestClient, poller: Poller) -> None:
+    seed(poller)
+    client.post("/language", data={"language": "de"})
+    page = client.get("/").text
+    assert 'aria-label="Sprache"' in page
+    local = (NOW - timedelta(days=7)).astimezone().strftime("%Y-%m-%d %H:%M")
+    assert f"Neu seit {local}" in page

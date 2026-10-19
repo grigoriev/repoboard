@@ -17,7 +17,7 @@
     <span class="spacer"></span>
     {% include "status.html" %}
     <form class="lang" method="post" action="/language">
-      <select name="language" aria-label="Language" onchange="this.form.submit()">
+      <select name="language" aria-label="{{ t('nav.language') }}" onchange="this.form.submit()">
         {% for code, name in languages %}
         <option value="{{ code }}" {{ 'selected' if code == language }}>{{ name }}</option>
         {% endfor %}

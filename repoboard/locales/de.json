@@ -2,6 +2,7 @@
   "app.name": "Repoboard",
   "nav.inbox": "Neu",
   "nav.overview": "Übersicht",
+  "nav.language": "Sprache",
   "toolbar.since": "Neu seit {time}",
   "toolbar.repos": "{count} Repositories",
   "toolbar.refresh": "Aktualisieren",
