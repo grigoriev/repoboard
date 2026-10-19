@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import re
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -116,11 +117,18 @@ async def read_multi_form(request: Request) -> Form:
     return parse_qs((await request.body()).decode(), keep_blank_values=True)
 
 
-def apply(web: Web, updated: Config) -> None:
-    """Save the config and hand it to the poller, which lists the owners again on its next poll."""
-    config.save(updated)
-    web.poller.config = updated
+# Requests run in parallel. Each edit reads the config, changes it and saves it: one edit at a time.
+EDITS = threading.Lock()
+
+
+def apply(web: Web, edit: Callable[[Config], Config]) -> Config:
+    """Edit the config, save it and hand it to the poller, which lists the owners again on its next poll."""
+    with EDITS:
+        updated = edit(web.poller.config)
+        config.save(updated)
+        web.poller.config = updated
     web.poller.refresh()
+    return updated
 
 
 def add_settings_page(app: FastAPI, web: Web) -> None:
@@ -151,13 +159,12 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
     async def save(request: Request) -> Response:
         form = await read_multi_form(request)
         try:
-            updated = form_to_config(form, web.poller.config)
-        except ConfigError as exc:
+            updated = apply(web, lambda current: form_to_config(form, current))
+        except (ConfigError, OSError) as exc:
             t = web.translator()
             reason = t(str(exc)) if str(exc) == WHOLE_NUMBERS else str(exc)
             draft = form_draft(form, web.poller.config)
             return page(request, draft, error=t("settings.not_saved", error=reason), status=400, chosen=draft.language)
-        apply(web, updated)
         # The page sets the language, so the choice of the header switcher must not override it.
         web.store.set_setting("language", updated.language)
         return RedirectResponse("/settings?saved=1", status_code=303)
@@ -185,8 +192,9 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
 
     def change(edit: Callable[[Config, str], Config], url: str) -> Response:
         try:
-            updated = edit(web.poller.config, url)
+            apply(web, lambda current: edit(current, url))
         except ConfigError as exc:
             return Response(str(exc), status_code=400)
-        apply(web, updated)
+        except OSError as exc:
+            return Response(str(exc), status_code=500)
         return Response(headers=UPDATED)

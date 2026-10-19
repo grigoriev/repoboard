@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,8 +14,8 @@ from repoboard.config import Config, Owner
 from repoboard.gh import Gh, GhError
 from repoboard.poller import Poller
 from repoboard.store import Store
-from repoboard.web.app import create_app
-from repoboard.web.settings import form_to_config
+from repoboard.web.app import Web, create_app
+from repoboard.web.settings import apply, form_to_config
 from tests.fakes import FakeGhRunner
 
 NOW = datetime(2026, 10, 19, 9, tzinfo=UTC)
@@ -218,3 +219,52 @@ def test_a_rejected_save_keeps_the_chosen_language(client: TestClient) -> None:
     # The header switcher keeps the language in use; the settings field shows the one picked.
     assert page.count('value="de" selected') == 1
     assert page.count('value="en" selected') == 1
+
+
+def read_only(_: Config, path: Path | None = None) -> None:
+    raise PermissionError(13, "Permission denied", "config.toml")
+
+
+def test_a_save_that_cannot_write_keeps_the_input(
+    client: TestClient, poller: Poller, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(config, "save", read_only)
+    before = poller.config
+    response = client.post("/settings", data={"repos": "cli/cli\nnew/repo", "language": "en"})
+    assert response.status_code == 400
+    assert "Permission denied" in response.text
+    assert "new/repo" in response.text
+    assert poller.config == before
+
+
+def test_a_watch_that_cannot_write_reports_it(
+    client: TestClient, poller: Poller, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(config, "save", read_only)
+    before = poller.config
+    response = client.post("/items/watch", data={"url": "https://github.com/cli/cli/issues/2"})
+    assert response.status_code == 500
+    assert "Permission denied" in response.text
+    assert poller.config == before
+
+
+def test_edits_at_the_same_time_keep_each_other(poller: Poller, config_file: Path) -> None:
+    first_read = threading.Event()
+    second_done = threading.Event()
+    web = Web(poller)
+
+    def slow_watch(current: Config) -> Config:
+        first_read.set()
+        second_done.wait(timeout=0.3)  # without the lock the second edit lands here and is lost
+        return config.watch(current, "https://github.com/cli/cli/issues/2")
+
+    def second_edit() -> None:
+        first_read.wait(timeout=5)
+        apply(web, lambda current: config.watch(current, "https://github.com/cli/cli/issues/3"))
+        second_done.set()
+
+    second = threading.Thread(target=second_edit, daemon=True)
+    second.start()
+    apply(web, slow_watch)
+    second.join(timeout=5)
+    assert {"https://github.com/cli/cli/issues/2", "https://github.com/cli/cli/issues/3"} <= set(poller.config.items)
