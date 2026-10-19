@@ -30,7 +30,7 @@
       </select>
     </form>
   </header>
-  <main>
+  <main id="content" hx-get="{{ self_url }}" hx-trigger="repoboard-updated from:body" hx-select="#content" hx-swap="outerHTML">
     {% block main %}{% endblock %}
   </main>
 </body>

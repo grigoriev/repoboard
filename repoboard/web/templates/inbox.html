@@ -6,7 +6,7 @@
     {%- if baseline %}{{ t("toolbar.since", time=baseline.astimezone().strftime("%Y-%m-%d %H:%M")) }} · {% endif -%}
     {{ t("toolbar.repos", count=repo_count) }}
   </span>
-  <form method="post" action="/seen-all"><button class="btn" type="submit">{{ t("toolbar.seen_all") }}</button></form>
+  <button class="btn" type="button" hx-post="/seen-all" hx-swap="none">{{ t("toolbar.seen_all") }}</button>
   <button class="btn primary" type="button" hx-post="/refresh" hx-swap="none">{{ t("toolbar.refresh") }}</button>
 </div>
 {{ org_chips(t, owners, org, "/") }}
@@ -19,7 +19,7 @@
   {% for section, entries in sections if entries %}
   <details class="sec" open>
     <summary><span class="stripe {{ section.value }}"></span>{{ t("section." ~ section.value) }} <span class="count">{{ entries | length }}</span></summary>
-    <div class="rows"><table>
+    <div class="rows"><table class="items"><colgroup><col class="c-repo"><col class="c-ref"><col class="c-title"><col class="c-status"><col class="c-age"><col class="c-act"></colgroup>
     <thead class="sr-only"><tr>
       <th scope="col">{{ t("column.repo") }}</th><th scope="col">{{ t("column.ref") }}</th><th scope="col">{{ t("column.title") }}</th>
       <th scope="col">{{ t("column.status") }}</th><th scope="col">{{ t("column.age") }}</th><th scope="col">{{ t("column.actions") }}</th>

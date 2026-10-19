@@ -12,9 +12,9 @@
 {% macro item_row(t, age, ref, short_repo, item, entry=None, show_repo=True, actions=True, snooze_days=()) -%}
 <tr data-key="{{ item.key }}">
   {% if show_repo %}<td class="repo {{ 'unread' if entry and entry.unseen }}" title="{{ item.repo }}"><a href="/repo/{{ item.repo }}">{{ short_repo(item.repo) }}</a></td>{% endif %}
-  <td class="num {{ 'unread' if not show_repo and entry and entry.unseen }}">{{ ref(item) }}</td>
+  <td class="num {{ 'unread' if not show_repo and entry and entry.unseen }}"><a href="{{ item.url }}" target="_blank" rel="noopener" data-key="{{ item.key }}">{{ ref(item) }}</a></td>
   <td class="title">
-    <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.title }}</a>
+    <a href="{{ item.url }}" target="_blank" rel="noopener" data-key="{{ item.key }}">{{ item.title }}</a>
     {%- if entry and entry.section.value == 'replies' and item.activity_by %}<span class="by">{{ t("reply.by", login=item.activity_by) }}</span>{% endif %}
   </td>
   <td>{{ pills(t, item) }}</td>
@@ -23,13 +23,13 @@
   <td class="act">
     {% if entry %}
     {% if entry.unseen %}
-    <button type="button" hx-post="/items/seen" hx-vals='{"key": {{ item.key | tojson }}}' hx-target="closest tr" hx-swap="delete swap:300ms">{{ t("action.seen") }}</button>
+    <button type="button" hx-post="/items/seen" hx-vals='{"key": {{ item.key | tojson }}}' hx-swap="none">{{ t("action.seen") }}</button>
     {% endif %}
     {% if entry.snoozed_until %}
-    <button type="button" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "0"}' hx-on::after-request="location.reload()">{{ t("action.unsnooze") }}</button>
+    <button type="button" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "0"}' hx-swap="none">{{ t("action.unsnooze") }}</button>
     {% else %}
     {% for days in snooze_days %}
-    <button type="button" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "{{ days }}"}' hx-target="closest tr" hx-swap="delete swap:300ms">{{ t("action.snooze_day" if days == 1 else "action.snooze_week") }}</button>
+    <button type="button" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "{{ days }}"}' hx-swap="none">{{ t("action.snooze_day" if days == 1 else "action.snooze_week") }}</button>
     {% endfor %}
     {% endif %}
     {% endif %}

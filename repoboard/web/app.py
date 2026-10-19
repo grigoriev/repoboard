@@ -26,6 +26,8 @@ from repoboard.store import RepoRow
 from repoboard.triage import Section
 
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost"})
+# Tells the page to reload its content in place, after an action or when a poll brought new data.
+UPDATED = {"HX-Trigger": "repoboard-updated"}
 KIND_ORDER = (Kind.ALERT, Kind.PR, Kind.ISSUE, Kind.DISCUSSION)
 SNOOZE_DAYS = (1, 7)
 ZOOM_MIN, ZOOM_MAX, ZOOM_STEP = 0.6, 2.0, 0.1
@@ -138,6 +140,9 @@ class Web:
         return {key: value if isinstance(value := saved.get(key), int) else default
                 for key, default in WINDOW_DEFAULT.items()}  # fmt: skip
 
+    def data_version(self) -> str:
+        return self.store.get_setting("data_version") or "never"
+
     def owners(self) -> list[str]:
         return sorted({repo.split("/", 1)[0] for repo in self.config.repos}, key=str.lower)
 
@@ -159,6 +164,8 @@ class Web:
             config_path=str(config_path()),
             snooze_days=SNOOZE_DAYS,
             zoom=f"{self.zoom():.1f}",
+            data_version=self.data_version(),
+            self_url=request.url.path + (f"?{request.url.query}" if request.url.query else ""),
         )
         return templates.TemplateResponse(request, name, context)
 
@@ -237,11 +244,10 @@ def add_pages(app: FastAPI, web: Web) -> None:
 
     @app.get("/status", response_class=HTMLResponse)
     def status(request: Request, seen: str | None = None) -> HTMLResponse:
-        # `seen` is the poll the page shows, "never" before the first one. A newer poll reloads the page.
+        # `seen` is the data version the page shows. A newer one reloads the content in place.
         response = web.render(request, "status.html")
-        last = web.poller.last_poll()
-        if seen is not None and last and last.isoformat() != seen:
-            response.headers["HX-Refresh"] = "true"
+        if seen is not None and seen != web.data_version():
+            response.headers.update(UPDATED)
         return response
 
 
@@ -249,24 +255,38 @@ def add_item_actions(app: FastAPI, web: Web) -> None:
     @app.post("/items/seen")
     async def seen(request: Request) -> Response:
         web.store.mark_seen([(await read_form(request))["key"]], web.poller.clock())
-        return Response()
+        return Response(headers=UPDATED)
 
     @app.post("/items/unseen")
     async def unseen(request: Request) -> Response:
         web.store.mark_unseen((await read_form(request))["key"])
-        return Response()
+        return Response(headers=UPDATED)
 
     @app.post("/items/snooze")
     async def snooze(request: Request) -> Response:
         data = await read_form(request)
         days = int(data.get("days", "0"))
         web.store.snooze(data["key"], web.poller.clock() + timedelta(days=days) if days > 0 else None)
-        return Response()
+        return Response(headers=UPDATED)
+
+    @app.post("/items/open")
+    async def open_item(request: Request) -> Response:
+        # Opening an item on GitHub counts as seeing it. Its repository is polled again soon,
+        # so a merge or a close there shows up here without waiting for the next full poll.
+        key = (await read_form(request))["key"]
+        web.store.mark_seen([key], web.poller.clock())
+        web.poller.touch(key.split("#", 1)[0])
+        return Response(status_code=204)
+
+    @app.post("/focus")
+    def focus() -> Response:
+        web.poller.refresh_touched()
+        return Response(status_code=204)
 
     @app.post("/seen-all")
-    def seen_all() -> RedirectResponse:
+    def seen_all() -> Response:
         web.store.mark_all_seen(web.poller.clock())
-        return RedirectResponse("/", status_code=303)
+        return Response(headers=UPDATED)
 
     @app.post("/refresh")
     def refresh() -> Response:
