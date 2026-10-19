@@ -18,12 +18,13 @@ from markupsafe import Markup
 from pydantic import BaseModel
 
 from repoboard import window
-from repoboard.config import LANGUAGES, config_path
+from repoboard.config import LANGUAGES, Config, config_path
 from repoboard.i18n import LANGUAGE_NAMES, Translator
 from repoboard.models import Item, Kind
 from repoboard.poller import Poller
 from repoboard.store import RepoRow
 from repoboard.triage import Section
+from repoboard.web.settings import add_settings_page
 
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost"})
 # Tells the page to reload its content in place, after an action or when a poll brought new data.
@@ -118,7 +119,10 @@ class Web:
     def __init__(self, poller: Poller) -> None:
         self.poller = poller
         self.store = poller.store
-        self.config = poller.config
+
+    @property
+    def config(self) -> Config:
+        return self.poller.config  # the settings page replaces it while the app runs
 
     def translator(self) -> Translator:
         return Translator(self.store.get_setting("language") or self.config.language)
@@ -178,6 +182,7 @@ def create_app(poller: Poller) -> FastAPI:
     add_pages(app, web)
     add_item_actions(app, web)
     add_settings(app, web)
+    add_settings_page(app, web)
     return app
 
 

@@ -331,3 +331,41 @@ def test_only_the_open_entry_is_the_default(poller: Poller) -> None:
     entries = menu_entries(tray_state(poller, Translator()))
     defaults = [label for label, action in entries if default_entry(label, action, tray_state(poller, Translator()))]
     assert defaults == ["Open Repoboard"]
+
+
+def test_menu_has_a_settings_entry(poller: Poller) -> None:
+    from repoboard.tray import menu_entries
+
+    entries = menu_entries(tray_state(poller, Translator("de")))
+    assert ("Einstellungen…", "settings") in entries
+    assert entries.index(("Einstellungen…", "settings")) < entries.index(("Beenden", "quit"))
+
+
+def test_window_opens_a_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    started: list[list[str]] = []
+    processes: list[FakeProcess] = []
+
+    def popen(cmd: list[str], **kwargs: Any) -> FakeProcess:
+        started.append(cmd)
+        processes.append(FakeProcess())
+        return processes[-1]
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+    w = Window("http://127.0.0.1:1/")
+    w.open("/settings")
+    assert started[0][-1] == "http://127.0.0.1:1/settings"
+    w.open("/settings")
+    assert processes[0].stdin.getvalue() == b"open http://127.0.0.1:1/settings\n"
+    w.open()
+    assert processes[0].stdin.getvalue().endswith(b"focus\n")
+
+
+def test_follow_commands_opens_pages() -> None:
+    seen: list[str] = []
+    window.follow_commands(
+        io.BytesIO(b"open http://x/settings\nfocus\n"),
+        focus=lambda: seen.append("focus"),
+        close=lambda: seen.append("close"),
+        navigate=lambda url: seen.append(f"open {url}"),
+    )
+    assert seen == ["open http://x/settings", "focus", "focus", "close"]

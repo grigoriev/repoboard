@@ -67,8 +67,9 @@ with an Apple Developer ID, so macOS asks once whether Repoboard may send notifi
 
 ## Configure
 
-Copy [config.example.toml](config.example.toml) to `~/.config/repoboard/config.toml`. Watch whole
-owners, single repositories, or both:
+Open **Settings** in the app, or copy [config.example.toml](config.example.toml) to
+`~/.config/repoboard/config.toml`. The settings page saves that file and applies it at once; the eye
+button on a row watches or unwatches that item. Watch whole owners, single repositories, or both:
 
 - `[[owners]]` takes every repository of a user or organization. New repositories join on their
   own, and Repoboard announces them. `include` and `exclude` narrow the list by name patterns,

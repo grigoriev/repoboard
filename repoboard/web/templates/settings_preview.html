@@ -1,0 +1,3 @@
+{% if error %}<p class="note error">{{ owner }}: {{ error }}</p>
+{% else %}<p class="note">{{ t("settings.preview_result", count=repos | length, total=total) }}</p>
+<ul class="preview-list">{% for name in repos %}<li>{{ short_repo(name) }}</li>{% endfor %}</ul>{% endif %}

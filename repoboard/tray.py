@@ -48,7 +48,7 @@ def tray_state(poller: Poller, t: Translator) -> TrayState:
         title=str(total) if total else "",
         sections=tuple((t(f"section.{section}"), len(inbox[section])) for section in Section),
         status=status,
-        labels={key: t(f"tray.{key}") for key in ("open", "refresh", "quit", "unseen", "open_at_login")},
+        labels={key: t(f"tray.{key}") for key in ("open", "refresh", "settings", "quit", "unseen", "open_at_login")},
     )
 
 
@@ -64,6 +64,7 @@ def menu_entries(state: TrayState) -> list[Entry]:
         SEPARATOR,
         (state.labels["open"], "open"),
         (state.labels["refresh"], "refresh"),
+        (state.labels["settings"], "settings"),
         (state.status, None),
         SEPARATOR,
         (state.labels["quit"], "quit"),
@@ -94,7 +95,7 @@ def badge_icon(count: str) -> Any:
 
 
 def run_tray(
-    poller: Poller, translator: Callable[[], Translator], open_window: Callable[[], None], on_quit: Callable[[], None]
+    poller: Poller, translator: Callable[[], Translator], open_window: Callable[..., None], on_quit: Callable[[], None]
 ) -> None:  # pragma: no cover - needs a desktop tray
     if sys.platform == "darwin":
         run_menu_bar(poller, translator, open_window, on_quit)
@@ -110,14 +111,18 @@ def linux_tray_hint() -> str | None:
 
 
 def run_system_tray(
-    poller: Poller, translator: Callable[[], Translator], open_window: Callable[[], None], on_quit: Callable[[], None]
+    poller: Poller, translator: Callable[[], Translator], open_window: Callable[..., None], on_quit: Callable[[], None]
 ) -> None:  # pragma: no cover - needs the Windows or Linux tray
     import pystray
 
     hint = linux_tray_hint()
     if hint:
         log.warning(hint)
-    actions = {"open": open_window, "refresh": poller.refresh}
+    actions: dict[str, Callable[[], None]] = {
+        "open": open_window,
+        "refresh": poller.refresh,
+        "settings": lambda: open_window("/settings"),
+    }
     stopped = threading.Event()
 
     def quit_app(icon: Any) -> None:
@@ -151,7 +156,7 @@ def run_system_tray(
 
 
 def run_menu_bar(
-    poller: Poller, translator: Callable[[], Translator], open_window: Callable[[], None], on_quit: Callable[[], None]
+    poller: Poller, translator: Callable[[], Translator], open_window: Callable[..., None], on_quit: Callable[[], None]
 ) -> None:  # pragma: no cover - needs the macOS menu bar
     import rumps
 
@@ -174,7 +179,12 @@ def run_menu_bar(
                 return
             self.signature = state
             self.menu.clear()
-            callbacks = {"open": lambda _: open_window(), "refresh": lambda _: poller.refresh(), "quit": self.quit}
+            callbacks = {
+                "open": lambda _: open_window(),
+                "refresh": lambda _: poller.refresh(),
+                "settings": lambda _: open_window("/settings"),
+                "quit": self.quit,
+            }
             keys = {state.labels["open"]: "o", state.labels["refresh"]: "r", state.labels["quit"]: "q"}
             for label, action in menu_entries(state):
                 if label == SEPARATOR[0]:

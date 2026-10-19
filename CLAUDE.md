@@ -49,7 +49,8 @@ Package `repoboard/`, console entry point `repoboard` (`repoboard.cli:main`):
 - `notify.py`: notification texts and backends (native, terminal-notifier, osascript)
 - `tray.py`: menu bar. `window.py`: pywebview window, driven through its stdin
 - `macos.py`: process name and icon, activation policy, open at login. `packaging/`: the app entry point
-- `web/app.py`: routes; `web/templates`: Jinja2; `web/static`: CSS and htmx
+- `web/app.py`: routes; `web/settings.py`: the settings page, which saves and applies the config
+- `web/templates`: Jinja2; `web/static`: CSS, htmx and `app.js`
 
 Tests mirror the modules in `tests/test_<module>.py`. `tests/visual` holds the Playwright screenshot
 tests: fixed data in `data.py`, baselines in `snapshots`. A UI change updates the baselines in the same PR. `tests/fakes.py` fakes `gh` by argument match.

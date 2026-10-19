@@ -35,14 +35,17 @@ class Window:
         self.url = url
         self._process: subprocess.Popen[bytes] | None = None
 
-    def open(self) -> None:
-        if self._alive() and self._send(b"focus"):
+    def open(self, path: str = "") -> None:
+        """Show the window: bring it forward, on the page `path` when one is given."""
+        url = urljoin(self.url, path) if path else self.url
+        command = f"open {url}".encode() if path else b"focus"
+        if self._alive() and self._send(command):
             return
         self._stop()
         try:
-            self._process = subprocess.Popen(window_command(self.url), stdin=subprocess.PIPE)
+            self._process = subprocess.Popen(window_command(url), stdin=subprocess.PIPE)
         except OSError:
-            webbrowser.open(self.url)
+            webbrowser.open(url)
 
     def close(self) -> None:
         if self._alive():
@@ -89,10 +92,21 @@ def window_command(url: str) -> list[str]:
     return [sys.executable, "-m", "repoboard.window", url]
 
 
-def follow_commands(stream: BinaryIO, focus: Callable[[], object], close: Callable[[], object]) -> None:
-    """Run the parent's commands until "close" or the end of the stream, then close the window."""
+def follow_commands(
+    stream: BinaryIO,
+    focus: Callable[[], object],
+    close: Callable[[], object],
+    navigate: Callable[[str], object] = lambda url: None,
+) -> None:
+    """Run the parent's commands until "close" or the end of the stream, then close the window.
+
+    "focus" brings the window forward, "open <url>" shows that page and brings it forward.
+    """
     for line in stream:
-        if line.strip() != b"focus":
+        command, _, argument = line.strip().decode().partition(" ")
+        if command == "open" and argument:
+            navigate(argument)
+        elif command != "focus":
             break  # "close", or a command this version does not know
         focus()
     close()
@@ -198,7 +212,7 @@ def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens
 
     threading.Thread(
         target=follow_commands,
-        args=(sys.stdin.buffer, focus, close_window(saver, window.destroy)),
+        args=(sys.stdin.buffer, focus, close_window(saver, window.destroy), window.load_url),
         name="repoboard-commands",
         daemon=True,
     ).start()

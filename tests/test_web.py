@@ -394,3 +394,12 @@ def test_merged_item_shows_merged_not_closed(client: TestClient, poller: Poller)
     page = client.get("/").text
     assert ">merged<" in page
     assert ">closed<" not in page
+
+
+def test_rows_offer_watch_and_unwatch(client: TestClient, poller: Poller) -> None:
+    seed(poller)
+    poller.store.save_watched([item("5", Kind.PR, repo="cli/cli", url="https://github.com/cli/cli/pull/5")], NOW)
+    page = client.get("/").text
+    assert 'data-action="watch" hx-post="/items/watch" hx-vals=\'{"url": "https://github.com/o/r/issues/1"}\'' in page
+    assert 'data-action="unwatch" hx-post="/items/unwatch"' in page
+    assert 'data-key="o/r#alert#dependabot/4" data-action="watch"' not in page
