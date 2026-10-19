@@ -6,7 +6,7 @@
 [![Python 3.14+](https://img.shields.io/badge/python-3.14+-blue.svg)](https://www.python.org/downloads/)
 [![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=grigoriev_repoboard&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=grigoriev_repoboard)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=grigoriev_repoboard&metric=coverage)](https://sonarcloud.io/summary/new_code?id=grigoriev_repoboard)
@@ -92,4 +92,4 @@ Security reports are welcome, see SECURITY.md.
 
 ## License
 
-Apache 2.0, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE).
