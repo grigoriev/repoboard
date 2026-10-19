@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import html
 import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -281,3 +282,17 @@ def test_edits_build_on_the_config_file(client: TestClient, poller: Poller, conf
     assert {"https://github.com/cli/cli/issues/7", "https://github.com/cli/cli/issues/8"} <= set(saved.items)
     client.post("/settings", data={"repos": "cli/cli", "language": "en"})
     assert config.load(config_file).port == 9999
+
+
+def test_the_page_shows_the_config_file(client: TestClient, poller: Poller, config_file: Path) -> None:
+    config.save(config.watch(poller.config, "https://github.com/cli/cli/issues/7"), config_file)
+    assert "https://github.com/cli/cli/issues/7" in client.get("/settings").text
+
+
+def test_a_broken_config_file_shows_its_error(client: TestClient, config_file: Path) -> None:
+    config_file.write_text("repos = [", encoding="utf-8")
+    with pytest.raises(config.ConfigError) as error:
+        config.load(config_file)
+    page = client.get("/settings").text
+    assert html.escape(str(error.value), quote=False) in page
+    assert "cli/cli" in page  # the config the app runs with

@@ -121,14 +121,16 @@ async def read_multi_form(request: Request) -> Form:
 EDITS = threading.Lock()
 
 
-def apply(web: Web, edit: Callable[[Config], Config]) -> Config:
-    """Edit the config, save it and hand it to the poller, which lists the owners again on its next poll.
+def current_config(web: Web) -> Config:
+    """The config file: the user may have changed it, or run `repoboard watch`, since the app started."""
+    path = config.config_path()
+    return config.load(path) if path.exists() else web.poller.config
 
-    The edit starts from the file: the user may have changed it, or run `repoboard watch`, since the start.
-    """
+
+def apply(web: Web, edit: Callable[[Config], Config]) -> Config:
+    """Edit the config file, save it and hand it to the poller, which lists the owners again on its next poll."""
     with EDITS:
-        path = config.config_path()
-        updated = edit(config.load(path) if path.exists() else web.poller.config)
+        updated = edit(current_config(web))
         config.save(updated)
         web.poller.config = updated
     web.poller.refresh()
@@ -157,7 +159,10 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
 
     @app.get("/settings", response_class=HTMLResponse)
     def show(request: Request) -> HTMLResponse:
-        return page(request, web.poller.config)
+        try:
+            return page(request, current_config(web))
+        except ConfigError as exc:
+            return page(request, web.poller.config, error=str(exc))
 
     @app.post("/settings", response_model=None)
     async def save(request: Request) -> Response:
