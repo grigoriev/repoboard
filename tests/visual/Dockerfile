@@ -8,10 +8,11 @@ ENV UV_PYTHON_INSTALL_DIR=/opt/python \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_LINK_MODE=copy \
     UV_PYTHON=3.14 \
-    UV_PYTHON_DOWNLOADS=never \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     TZ=UTC
 RUN uv python install 3.14
+# The tests use the Python above. Downloading another one would need a writable /opt/python.
+ENV UV_PYTHON_DOWNLOADS=never
 # pwuser of the Playwright image. The script runs the container as the caller's uid anyway.
 USER 1001:1001
 WORKDIR /repo
