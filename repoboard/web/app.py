@@ -152,10 +152,11 @@ def create_app(poller: Poller) -> FastAPI:
         return Response(headers={"HX-Trigger": "repoboard-status"})
 
     @app.get("/status", response_class=HTMLResponse)
-    def status(request: Request, seen: str = "") -> HTMLResponse:
+    def status(request: Request, seen: str | None = None) -> HTMLResponse:
+        # `seen` is the poll the page shows, "never" before the first one. A newer poll reloads the page.
         response = render(request, "status.html")
         last = poller.last_poll()
-        if seen and last and last.isoformat() != seen:
+        if seen is not None and last and last.isoformat() != seen:
             response.headers["HX-Refresh"] = "true"
         return response
 

@@ -190,3 +190,10 @@ def test_status_link_survives_url_decoding(client: TestClient, poller: Poller) -
     page = client.get("/status").text
     link = page.split('hx-get="', 1)[1].split('"', 1)[0]
     assert "HX-Refresh" not in client.get(link.replace("&amp;", "&")).headers
+
+
+def test_page_reloads_after_the_first_poll(client: TestClient, poller: Poller) -> None:
+    link = client.get("/status").text.split('hx-get="', 1)[1].split('"', 1)[0]
+    assert "HX-Refresh" not in client.get(link).headers
+    poller.store.set_setting("last_poll", NOW.isoformat())
+    assert client.get(link).headers.get("HX-Refresh") == "true"
