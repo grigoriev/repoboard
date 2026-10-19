@@ -323,3 +323,11 @@ def test_linux_tray_hint(monkeypatch: pytest.MonkeyPatch, platform: str, has_gi:
     monkeypatch.setattr("sys.platform", platform)
     monkeypatch.setattr("importlib.util.find_spec", lambda name: object() if has_gi else None)
     assert (tray.linux_tray_hint() is not None) is hint
+
+
+def test_only_the_open_entry_is_the_default(poller: Poller) -> None:
+    from repoboard.tray import default_entry, menu_entries
+
+    entries = menu_entries(tray_state(poller, Translator()))
+    defaults = [label for label, action in entries if default_entry(label, action, tray_state(poller, Translator()))]
+    assert defaults == ["Open Repoboard"]

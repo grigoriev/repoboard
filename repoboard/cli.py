@@ -20,7 +20,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="repoboard", description="Daily overview of your GitHub repositories.")
     parser.add_argument("--version", action="version", version=f"repoboard {__version__}")
     commands = parser.add_subparsers(dest="command")
-    commands.add_parser("tray", help="run in the menu bar with notifications (the default on macOS)")
+    commands.add_parser(
+        "tray", help="run in the tray with notifications: the menu bar on macOS, where it is the default"
+    )
     serve = commands.add_parser("serve", help="poll in the background and serve the web UI")
     serve.add_argument("--no-browser", action="store_true", help="do not open the browser")
     commands.add_parser("poll", help="poll once and print the inbox counts")

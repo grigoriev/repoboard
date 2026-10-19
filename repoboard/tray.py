@@ -70,6 +70,11 @@ def menu_entries(state: TrayState) -> list[Entry]:
     ]
 
 
+def default_entry(label: str, action: str | None, state: TrayState) -> bool:
+    """pystray runs the default entry on a click on the icon. Only "Open Repoboard" is it."""
+    return action == "open" and label == state.labels["open"]
+
+
 def icon_path() -> str:
     return str(resources.files("repoboard") / "resources" / "tray.png")
 
@@ -120,18 +125,19 @@ def run_system_tray(
         on_quit()
         icon.stop()
 
-    def item(label: str, action: str | None) -> Any:
+    def item(label: str, action: str | None, state: TrayState) -> Any:
         if label == SEPARATOR[0]:
             return pystray.Menu.SEPARATOR
         if action == "quit":
             return pystray.MenuItem(label, lambda icon, _: quit_app(icon))
         if action:
             run = actions[action]
-            return pystray.MenuItem(label, lambda _icon, _item: run(), default=action == "open")
+            return pystray.MenuItem(label, lambda _icon, _item: run(), default=default_entry(label, action, state))
         return pystray.MenuItem(label, None, enabled=False)
 
     def items() -> Any:
-        return [item(label, action) for label, action in menu_entries(tray_state(poller, translator()))]
+        state = tray_state(poller, translator())
+        return [item(label, action, state) for label, action in menu_entries(state)]
 
     def refresh(icon: Any) -> None:
         icon.visible = True
