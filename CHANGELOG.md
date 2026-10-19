@@ -30,7 +30,3 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Sort the overview by any column. The sort is kept between sessions.
 - The window keeps its size between sessions. It opens centered, so it never lands on a monitor
   that is gone.
-
-### Changed
-
-- The license is MIT, as in the other grigoriev repositories. It was Apache 2.0.
