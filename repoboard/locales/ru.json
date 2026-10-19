@@ -88,6 +88,7 @@
   "tray.polling": "Опрашиваю…",
   "tray.quit": "Выход",
   "tray.unseen": "Непросмотрено",
+  "tray.open_at_login": "Открывать при входе",
   "notify.new.issue": "Новый issue в {repo}",
   "notify.new.discussion": "Новая discussion в {repo}",
   "notify.new.pr": "Новый pull request в {repo}",

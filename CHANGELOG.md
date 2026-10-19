@@ -41,3 +41,6 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Keyboard focus survives live updates. After "Seen" it moves to the same button of the next row.
 - The menu bar asks the window to close instead of killing it, so the window keeps its size. A
   window whose menu bar process is gone closes as well.
+- `scripts/build-app.sh` builds `Repoboard.app`, a menu bar app with **Open at login** in its menu.
+- Notifications fall back to terminal-notifier, which opens the item on a click, when macOS does not
+  allow native notifications.
