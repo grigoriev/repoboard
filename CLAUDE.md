@@ -70,4 +70,13 @@ Flag these in a pull request:
 - Missing tests for new behavior, or coverage below 90%
 - No `## [Unreleased]` entry in `CHANGELOG.md`, or README not updated for a behavior change
 
+## CI/CD and Release
+
+- `ci.yml`: actionlint, zizmor, ruff, mypy, pytest, SonarCloud, package build
+- `bump-version.yml`: manual, writes the version to `pyproject.toml`, `repoboard/__init__.py` and
+  `uv.lock`, cuts the changelog section, tags `vX.Y.Z`
+- `release.yml`: on `v*` tags, tests, builds the wheel and sdist, attests provenance, creates the
+  immutable GitHub release with the notes from `CHANGELOG.md`
+- Renovate updates dependencies and `uv.lock`
+
 Commit, branch and pull request rules are in `CONTRIBUTING.md`.

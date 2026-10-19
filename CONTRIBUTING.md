@@ -27,3 +27,8 @@ CI runs lint, type check, tests and SonarCloud for every pull request.
    quote it. Update the README when behavior or configuration changes.
 
 Pull requests are squash-merged once all required checks are green.
+
+## Releases
+
+A maintainer runs the Bump Version workflow. It moves the Unreleased entries into a versioned
+section, tags the release, and the Release workflow publishes it with signed build provenance.
