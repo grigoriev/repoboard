@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import subprocess
 import sys
 import threading
@@ -12,6 +13,8 @@ import webbrowser
 from collections.abc import Callable, Sequence
 from typing import BinaryIO
 from urllib.parse import urljoin
+
+log = logging.getLogger(__name__)
 
 WIDTH, HEIGHT = 1200, 820
 SAVE_DELAY_SECONDS = 0.5
@@ -159,6 +162,17 @@ class GeometrySaver:
             self._save(pending)
 
 
+def start_or_browse(
+    start: Callable[[], object], url: str, open_browser: Callable[[str], object] = webbrowser.open
+) -> None:
+    """Run the native window, or open the browser when this system has no GUI backend for pywebview."""
+    try:
+        start()
+    except Exception as exc:  # pywebview raises its own error types per backend
+        log.warning("no native window (%s), opening the browser", exc)
+        open_browser(url)
+
+
 def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens a native window
     url = (argv or sys.argv[1:])[0]
     try:
@@ -188,7 +202,7 @@ def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens
         name="repoboard-commands",
         daemon=True,
     ).start()
-    webview.start()
+    start_or_browse(webview.start, url)
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -24,7 +24,7 @@ dependencies = [
     "fastapi>=0.146.0",
     "jinja2>=3.1.6",
     "markupsafe>=3.0.4",
-    "pillow>=12.3.0 ; sys_platform != 'darwin'",
+    "pillow>=12.3.0",
     "pyobjc-framework-servicemanagement>=12.2.2 ; sys_platform == 'darwin'",
     "pystray>=0.19.5 ; sys_platform != 'darwin'",
     "pywebview>=6.2.1",
@@ -33,6 +33,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The Linux tray needs PyGObject for its menu; it builds against the system GTK and AppIndicator.
+linux = [
+    "PyGObject>=3.58.1 ; sys_platform == 'linux'",
+]
 dev = [
     "pytest==9.1.1",
     "pytest-cov==7.1.0",

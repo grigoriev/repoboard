@@ -299,3 +299,27 @@ def test_menu_entries_follow_the_state(poller: Poller) -> None:
     assert ("Обновить сейчас", "refresh") in entries
     assert entries[-1] == ("Выход", "quit")
     assert ("Новые ответы: 0", "open") in entries
+
+
+def test_window_falls_back_to_the_browser_when_no_gui_starts() -> None:
+    opened: list[str] = []
+
+    def no_gui() -> None:
+        raise RuntimeError("You must have either QT or GTK with Python extensions installed")
+
+    window.start_or_browse(no_gui, "http://x/", opened.append)
+    assert opened == ["http://x/"]
+    window.start_or_browse(lambda: None, "http://x/", opened.append)
+    assert opened == ["http://x/"]
+
+
+@pytest.mark.parametrize(
+    ("platform", "has_gi", "hint"),
+    [("linux", False, True), ("linux", True, False), ("win32", False, False)],
+)
+def test_linux_tray_hint(monkeypatch: pytest.MonkeyPatch, platform: str, has_gi: bool, hint: bool) -> None:
+    from repoboard import tray
+
+    monkeypatch.setattr("sys.platform", platform)
+    monkeypatch.setattr("importlib.util.find_spec", lambda name: object() if has_gi else None)
+    assert (tray.linux_tray_hint() is not None) is hint

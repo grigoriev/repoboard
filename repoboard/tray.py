@@ -5,6 +5,8 @@ The model is plain Python. rumps draws it in the macOS menu bar, pystray in the 
 
 from __future__ import annotations
 
+import importlib.util
+import logging
 import sys
 import threading
 from collections.abc import Callable
@@ -15,6 +17,8 @@ from typing import Any
 from repoboard.i18n import Translator
 from repoboard.poller import Poller
 from repoboard.triage import Section
+
+log = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 5
 
@@ -93,11 +97,21 @@ def run_tray(
         run_system_tray(poller, translator, open_window, on_quit)
 
 
+def linux_tray_hint() -> str | None:
+    """Without PyGObject pystray falls back to its xorg backend, which shows no menu on Linux."""
+    if sys.platform.startswith("linux") and importlib.util.find_spec("gi") is None:
+        return "the tray has no menu without PyGObject: install repoboard with the linux extra"
+    return None
+
+
 def run_system_tray(
     poller: Poller, translator: Callable[[], Translator], open_window: Callable[[], None], on_quit: Callable[[], None]
 ) -> None:  # pragma: no cover - needs the Windows or Linux tray
     import pystray
 
+    hint = linux_tray_hint()
+    if hint:
+        log.warning(hint)
     actions = {"open": open_window, "refresh": poller.refresh}
     stopped = threading.Event()
 
