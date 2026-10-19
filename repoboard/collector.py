@@ -18,6 +18,7 @@ OPEN_LIMIT = "300"
 RECENT_LIMIT = "100"
 BOT_LOGINS = frozenset({"github-actions", "renovate", "dependabot", "coderabbitai", "sonarqubecloud", "codecov"})
 
+# The newest reply of each of the last 20 threads: a reply can land in an older thread.
 DISCUSSIONS_QUERY = """
 query($owner: String!, $name: String!) {
   repository(owner: $owner, name: $name) {
@@ -27,7 +28,7 @@ query($owner: String!, $name: String!) {
       nodes {
         number title url createdAt updatedAt closed isAnswered
         author { login }
-        comments(last: 1) {
+        comments(last: 20) {
           nodes {
             createdAt author { login }
             replies(last: 1) { nodes { createdAt author { login } } }

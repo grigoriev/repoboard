@@ -161,9 +161,10 @@ def test_discussions() -> None:
                             "comments": {
                                 "nodes": [
                                     {
-                                        **comment("me", "2026-10-03T10:00:00Z"),
+                                        **comment("erin", "2026-10-01T10:00:00Z"),
                                         "replies": {"nodes": [comment("dave", "2026-10-04T10:00:00Z")]},
-                                    }
+                                    },
+                                    {**comment("me", "2026-10-03T10:00:00Z"), "replies": {"nodes": []}},
                                 ]
                             },
                         }
@@ -279,3 +280,9 @@ def test_pull_requests_client_error_propagates() -> None:
     c, _ = collector({**empty_repo_routes(), "pr list": GhError("HTTP 404", 404)})
     with pytest.raises(GhError):
         c.pull_requests("o/r")
+
+
+def test_discussion_query_reads_replies_in_older_threads() -> None:
+    from repoboard.collector import DISCUSSIONS_QUERY
+
+    assert "comments(last: 1)" not in DISCUSSIONS_QUERY
