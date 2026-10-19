@@ -144,7 +144,7 @@ def test_first_poll_stays_silent_until_a_repository_was_read(store: Store) -> No
     assert store.get_setting("notified_once") is not None
 
 
-def test_no_repositories_ends_the_silent_first_poll(store: Store) -> None:
+def test_no_repositories_keeps_the_first_poll_silent(store: Store) -> None:
     poller = Poller(Config(), store, Gh(FakeGhRunner({"api user": {"login": "me"}})), Clock())
     poller.poll()
-    assert store.get_setting("notified_once") is not None
+    assert store.get_setting("notified_once") is None

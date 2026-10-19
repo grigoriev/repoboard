@@ -76,7 +76,7 @@ class Poller:
         self.store.set_setting("last_poll", now.isoformat())
         self.last_error = None
         fresh = self.store.take_notifications(now, silent=first_run)
-        if not snapshots or any(snapshot.error is None for snapshot in snapshots):
+        if any(snapshot.error is None for snapshot in snapshots):
             self.store.set_setting("notified_once", now.isoformat())
         for listener in self.listeners:
             listener(fresh)
