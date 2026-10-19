@@ -16,3 +16,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - SQLite store with inbox sections (security, failed, Renovate, new, replies), seen and snooze
   marks, notification tracking and a per-repository overview.
 - English, Russian and German translations. English is the default.
+- Background poller: polls every interval or on demand and reports new items. The first poll
+  stays silent.
