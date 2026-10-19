@@ -33,8 +33,9 @@ def test_paginate_flattens_pages() -> None:
 
 def test_graphql_passes_variables() -> None:
     runner = FakeRunner('{"data": {}}')
-    Gh(runner).graphql("query{}", owner="a", name="b")
-    assert runner.calls == [["api", "graphql", "-f", "query=query{}", "-F", "owner=a", "-F", "name=b"]]
+    Gh(runner).graphql("query{}", owner="a", name="2048")
+    # -f keeps a numeric repo name a string; -F would send it as an integer.
+    assert runner.calls == [["api", "graphql", "-f", "query=query{}", "-f", "owner=a", "-f", "name=2048"]]
 
 
 def test_viewer_login() -> None:

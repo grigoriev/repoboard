@@ -56,7 +56,7 @@ class Gh:
     def graphql(self, query: str, **variables: str) -> Any:
         args = ["api", "graphql", "-f", f"query={query}"]
         for name, value in variables.items():
-            args += ["-F", f"{name}={value}"]
+            args += ["-f", f"{name}={value}"]  # -F would turn a numeric repo name into an integer
         return self.json(args)
 
     def viewer_login(self) -> str:
