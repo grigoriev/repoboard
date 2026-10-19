@@ -42,6 +42,7 @@ def test_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         {"repos": ["no-slash"]},
         {"language": "fr"},
         {"port": 0},
+        {"port": 70000},
         {"port": "80"},
         {"poll_interval_minutes": True},
     ],

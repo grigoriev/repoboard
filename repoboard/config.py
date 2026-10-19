@@ -68,7 +68,7 @@ def parse(data: dict[str, object]) -> Config:
         language=str(language),
         poll_interval_minutes=_positive_int(data, "poll_interval_minutes", defaults.poll_interval_minutes),
         lookback_days=_positive_int(data, "lookback_days", defaults.lookback_days),
-        port=_positive_int(data, "port", defaults.port),
+        port=_port(data, defaults.port),
         database=Path(database).expanduser() if isinstance(database, str) else defaults.database,
     )
 
@@ -78,6 +78,13 @@ def _positive_int(data: dict[str, object], key: str, default: int) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ConfigError(f"{key} must be a positive integer")
     return value
+
+
+def _port(data: dict[str, object], default: int) -> int:
+    port = _positive_int(data, "port", default)
+    if port > 65535:
+        raise ConfigError("port must be at most 65535")
+    return port
 
 
 def dump(config: Config) -> str:
