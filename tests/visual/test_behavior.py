@@ -44,5 +44,5 @@ def test_opening_an_item_removes_it_from_new(app: Callable[..., str], page_for: 
     rows = page.locator('details[data-section="new"] tbody tr')
     before = rows.count()
     with page.context.expect_page():
-        page.get_by_role("link", name="#412").click()
+        page.get_by_role("link", name="#10412").click()
     expect(rows).to_have_count(before - 1)

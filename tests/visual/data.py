@@ -128,7 +128,7 @@ def snapshots() -> list[RepoSnapshot]:
                     created_at=ago(days=14),
                 ),
                 item(
-                    pdf, Kind.ISSUE, "412", "Export fails for documents with nested tables", created_at=ago(minutes=5)
+                    pdf, Kind.ISSUE, "10412", "Export fails for documents with nested tables", created_at=ago(minutes=5)
                 ),
                 item(
                     pdf,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import socket
 import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 
@@ -25,25 +26,29 @@ from tests.visual.data import NOW, REPOS, seed  # noqa: E402
 Setup = Callable[[Poller], None]
 
 
-def free_port() -> int:
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        return int(probe.getsockname()[1])
+STARTUP_SECONDS = 10
 
 
 @contextmanager
 def running(poller: Poller) -> Iterator[str]:
-    port = free_port()
-    server = uvicorn.Server(uvicorn.Config(create_app(poller), host="127.0.0.1", port=port, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
+    # Bind once and hand the socket to uvicorn: probing a free port and binding later would race.
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(create_app(poller), log_level="warning"))
+    thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()
+    deadline = time.monotonic() + STARTUP_SECONDS
     while not server.started:
-        threading.Event().wait(0.02)
+        if not thread.is_alive() or time.monotonic() > deadline:
+            raise RuntimeError("the app server did not start")
+        time.sleep(0.02)
     try:
         yield f"http://127.0.0.1:{port}"
     finally:
         server.should_exit = True
         thread.join(5)
+        sock.close()
 
 
 @pytest.fixture
@@ -90,6 +95,8 @@ def page_for(browser: Browser) -> Iterator[Callable[..., Page]]:
             locale="en-US",
             timezone_id="UTC",
         )
+        # Links lead to GitHub. The tests must not depend on the network, so those requests stop here.
+        context.route("https://github.com/**", lambda route: route.abort())
         contexts.append(context)
         return context.new_page()
 

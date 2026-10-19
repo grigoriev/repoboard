@@ -38,6 +38,8 @@ dev = [
     "httpx2>=2.14.0",
 ]
 
+[dependency-groups]
+# Only the visual tests use these. A group, not an extra, so --all-extras in CI leaves them out.
 visual = [
     "playwright==1.64.0",
     "pillow==12.3.0",
