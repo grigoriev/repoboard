@@ -26,7 +26,7 @@ REFRESH_SECONDS = 5
 @dataclass(frozen=True)
 class TrayState:
     title: str
-    sections: tuple[tuple[str, int], ...]
+    sections: tuple[tuple[str, str, int], ...]  # name, label and count
     status: str
     labels: dict[str, str]
 
@@ -46,13 +46,14 @@ def tray_state(poller: Poller, t: Translator) -> TrayState:
         status = f"{status} · {poller.last_error[:60]}"
     return TrayState(
         title=str(total) if total else "",
-        sections=tuple((t(f"section.{section}"), len(inbox[section])) for section in Section),
+        sections=tuple((section.value, t(f"section.{section}"), len(inbox[section])) for section in Section),
         status=status,
         labels={key: t(f"tray.{key}") for key in ("open", "refresh", "settings", "quit", "unseen", "open_at_login")},
     )
 
 
-Entry = tuple[str, str | None]  # label and action: "open", "refresh", "quit", or None for plain text
+# Label and action: "open", "section:<name>", "settings", "refresh", "quit", or None for plain text.
+Entry = tuple[str, str | None]
 SEPARATOR: Entry = ("-", None)
 BADGE_SIZE = 64
 
@@ -60,7 +61,7 @@ BADGE_SIZE = 64
 def menu_entries(state: TrayState) -> list[Entry]:
     return [
         (state.labels["unseen"], None),
-        *((f"{label}: {count}", "open") for label, count in state.sections),
+        *((f"{label}: {count}", f"section:{name}") for name, label, count in state.sections),
         SEPARATOR,
         (state.labels["open"], "open"),
         (state.labels["refresh"], "refresh"),
@@ -69,6 +70,17 @@ def menu_entries(state: TrayState) -> list[Entry]:
         SEPARATOR,
         (state.labels["quit"], "quit"),
     ]
+
+
+def menu_page(action: str | None) -> str | None:
+    """The page an entry opens in the window: "" for the inbox, None for an entry that opens none."""
+    if action == "open":
+        return ""
+    if action == "settings":
+        return "/settings"
+    if action and action.startswith("section:"):
+        return f"/?section={action.removeprefix('section:')}"
+    return None
 
 
 def default_entry(label: str, action: str | None, state: TrayState) -> bool:
@@ -118,11 +130,6 @@ def run_system_tray(
     hint = linux_tray_hint()
     if hint:
         log.warning(hint)
-    actions: dict[str, Callable[[], None]] = {
-        "open": open_window,
-        "refresh": poller.refresh,
-        "settings": lambda: open_window("/settings"),
-    }
     stopped = threading.Event()
 
     def quit_app(icon: Any) -> None:
@@ -135,9 +142,12 @@ def run_system_tray(
             return pystray.Menu.SEPARATOR
         if action == "quit":
             return pystray.MenuItem(label, lambda icon, _: quit_app(icon))
-        if action:
-            run = actions[action]
-            return pystray.MenuItem(label, lambda _icon, _item: run(), default=default_entry(label, action, state))
+        if action == "refresh":
+            return pystray.MenuItem(label, lambda _icon, _item: poller.refresh())
+        if (path := menu_page(action)) is not None:
+            return pystray.MenuItem(
+                label, lambda _icon, _item: open_window(path), default=default_entry(label, action, state)
+            )
         return pystray.MenuItem(label, None, enabled=False)
 
     def items() -> Any:
@@ -179,12 +189,7 @@ def run_menu_bar(
                 return
             self.signature = state
             self.menu.clear()
-            callbacks = {
-                "open": lambda _: open_window(),
-                "refresh": lambda _: poller.refresh(),
-                "settings": lambda _: open_window("/settings"),
-                "quit": self.quit,
-            }
+            callbacks = {"refresh": lambda _: poller.refresh(), "quit": self.quit}
             keys = {state.labels["open"]: "o", state.labels["refresh"]: "r", state.labels["quit"]: "q"}
             for label, action in menu_entries(state):
                 if label == SEPARATOR[0]:
@@ -194,8 +199,13 @@ def run_menu_bar(
                     login = rumps.MenuItem(state.labels["open_at_login"], callback=self.toggle_login)
                     login.state = int(opens_at_login())
                     self.menu.add(login)
-                callback = callbacks.get(action or "")
+                path = menu_page(action)
+                callback = callbacks.get(action or "") or (None if path is None else self.opener(path))
                 self.menu.add(rumps.MenuItem(label, callback=callback, key=keys.get(label) if callback else None))
+
+        @staticmethod
+        def opener(path: str) -> Callable[[object], None]:
+            return lambda _: open_window(path)
 
         def toggle_login(self, item: rumps.MenuItem) -> None:
             set_open_at_login(not item.state)

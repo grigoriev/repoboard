@@ -68,3 +68,16 @@ def test_focus_stays_on_a_link_after_a_live_update(app: Callable[..., str], page
     page.evaluate("htmx.trigger(document.body, 'repoboard-updated')")
     page.wait_for_timeout(500)
     expect(page.locator(":focus")).to_have_text("#12")
+
+
+def test_the_tray_opens_a_section(app: Callable[..., str], page_for: Callable[..., Page]) -> None:
+    base = app()
+    page = page_for(height=400)
+    page.goto(base)
+    replies = page.locator('details[data-section="replies"]')
+    replies.locator("summary").click()  # collapsed before
+    expect(replies).not_to_have_attribute("open", "")
+    page.goto(base + "?section=replies")
+    expect(replies).to_have_attribute("open", "")
+    expect(replies.locator("summary")).to_be_in_viewport()
+    assert page.evaluate("window.scrollY") > 0

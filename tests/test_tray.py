@@ -40,7 +40,7 @@ def test_state_before_first_poll(poller: Poller) -> None:
     assert state.status == "Not polled yet"
     assert state.labels["quit"] == "Quit"
     assert state.labels["open_at_login"] == "Open at login"
-    assert ("New replies", 0) in state.sections
+    assert ("replies", "New replies", 0) in state.sections
 
 
 def test_state_with_items(poller: Poller) -> None:
@@ -298,7 +298,7 @@ def test_menu_entries_follow_the_state(poller: Poller) -> None:
     assert ("Открыть Repoboard", "open") in entries
     assert ("Обновить сейчас", "refresh") in entries
     assert entries[-1] == ("Выход", "quit")
-    assert ("Новые ответы: 0", "open") in entries
+    assert ("Новые ответы: 0", "section:replies") in entries
 
 
 def test_window_falls_back_to_the_browser_when_no_gui_starts() -> None:
@@ -369,3 +369,14 @@ def test_follow_commands_opens_pages() -> None:
         navigate=lambda url: seen.append(f"open {url}"),
     )
     assert seen == ["open http://x/settings", "focus", "focus", "close"]
+
+
+def test_menu_page_per_action() -> None:
+    from repoboard.tray import menu_page
+
+    assert menu_page("open") == ""
+    assert menu_page("settings") == "/settings"
+    assert menu_page("section:new") == "/?section=new"
+    assert menu_page("refresh") is None
+    assert menu_page("quit") is None
+    assert menu_page(None) is None
