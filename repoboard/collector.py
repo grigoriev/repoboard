@@ -265,23 +265,38 @@ def check_state(rollup: list[dict[str, Any]]) -> Tag | None:
     return Tag.CHECKS_PENDING if pending else None
 
 
+AlertFields = tuple[str, str | None, str]  # title, severity, author
+
+
+def _dependabot_fields(node: dict[str, Any]) -> AlertFields:
+    advisory = node.get("security_advisory") or {}
+    package = ((node.get("dependency") or {}).get("package") or {}).get("name", "")
+    title = f"{package}: {advisory.get('summary', '')}".strip(": ")
+    severity = (node.get("security_vulnerability") or {}).get("severity") or advisory.get("severity")
+    return title, severity, "dependabot"
+
+
+def _code_scanning_fields(node: dict[str, Any]) -> AlertFields:
+    rule = node.get("rule") or {}
+    title = rule.get("description") or rule.get("name") or ""
+    severity = rule.get("security_severity_level") or rule.get("severity")
+    return title, severity, (node.get("tool") or {}).get("name") or "code scanning"
+
+
+def _secret_scanning_fields(node: dict[str, Any]) -> AlertFields:
+    return node.get("secret_type_display_name") or node.get("secret_type") or "", "secret", "secret scanning"
+
+
+_ALERT_FIELDS = {
+    AlertSource.DEPENDABOT: _dependabot_fields,
+    AlertSource.CODE_SCANNING: _code_scanning_fields,
+    AlertSource.SECRET_SCANNING: _secret_scanning_fields,
+}
+
+
 def alert_item(repo: str, source: AlertSource, node: dict[str, Any]) -> Item:
     created = parse_time(node["created_at"])
-    if source is AlertSource.DEPENDABOT:
-        advisory = node.get("security_advisory") or {}
-        package = ((node.get("dependency") or {}).get("package") or {}).get("name", "")
-        title = f"{package}: {advisory.get('summary', '')}".strip(": ")
-        severity = (node.get("security_vulnerability") or {}).get("severity") or advisory.get("severity")
-        author = "dependabot"
-    elif source is AlertSource.CODE_SCANNING:
-        rule = node.get("rule") or {}
-        title = rule.get("description") or rule.get("name") or ""
-        severity = rule.get("security_severity_level") or rule.get("severity")
-        author = ((node.get("tool") or {}).get("name")) or "code scanning"
-    else:
-        title = node.get("secret_type_display_name") or node.get("secret_type") or ""
-        severity = "secret"
-        author = "secret scanning"
+    title, severity, author = _ALERT_FIELDS[source](node)
     tag = Tag.SECRET if severity == "secret" else _SEVERITY_TAGS.get(str(severity).lower(), Tag.LOW)
     return Item(
         repo=repo,
