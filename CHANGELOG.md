@@ -30,3 +30,7 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Sort the overview by any column. The sort is kept between sessions.
 - The window keeps its size between sessions. It opens centered, so it never lands on a monitor
   that is gone.
+- Opening an item on GitHub marks it seen and polls its repository again. Coming back to
+  Repoboard polls those repositories at once, so a merged pull request leaves the list in seconds.
+- The page reloads its content in place after every action and poll. Section counts stay right.
+- The number of an issue or pull request links to it. Item tables share their column widths.

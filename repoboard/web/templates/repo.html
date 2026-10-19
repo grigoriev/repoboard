@@ -17,7 +17,7 @@
 {% set ns.any = true %}
 <section class="panel">
   <h2>{{ t("group." ~ kind.value) }} <span class="count">{{ items | length }}</span></h2>
-  <div class="rows"><table>
+  <div class="rows"><table class="items"><colgroup><col class="c-ref"><col class="c-title"><col class="c-status"><col class="c-age"><col class="c-act"></colgroup>
     <thead class="sr-only"><tr>
       <th scope="col">{{ t("column.ref") }}</th><th scope="col">{{ t("column.title") }}</th>
       <th scope="col">{{ t("column.status") }}</th><th scope="col">{{ t("column.age") }}</th><th scope="col">{{ t("column.actions") }}</th>

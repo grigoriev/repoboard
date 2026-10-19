@@ -113,10 +113,10 @@ def test_seen_unseen_and_snooze(client: TestClient, poller: Poller) -> None:
     assert "Title 1<" in client.get("/").text
 
 
-def test_seen_all_redirects(client: TestClient, poller: Poller) -> None:
+def test_seen_all_updates_the_page(client: TestClient, poller: Poller) -> None:
     seed(poller)
-    response = client.post("/seen-all", follow_redirects=False)
-    assert response.status_code == 303
+    response = client.post("/seen-all")
+    assert response.headers["HX-Trigger"] == "repoboard-updated"
     assert "Nothing new" in client.get("/").text
 
 
@@ -147,10 +147,12 @@ def test_refresh_and_status(client: TestClient, poller: Poller) -> None:
     poller.polling = False
     poller.last_error = "auth required"
     poller.store.set_setting("last_poll", NOW.isoformat())
-    status = client.get("/status", params={"seen": (NOW - HOUR).isoformat()})
-    assert status.headers.get("HX-Refresh") == "true"
+    poller.store.set_setting("data_version", "v2")
+    status = client.get("/status", params={"seen": "v1"})
+    assert status.headers.get("HX-Trigger") == "repoboard-updated"
+    assert "HX-Refresh" not in status.headers
     assert "auth required" in status.text
-    assert "HX-Refresh" not in client.get("/status", params={"seen": NOW.isoformat()}).headers
+    assert "HX-Trigger" not in client.get("/status", params={"seen": "v2"}).headers
 
 
 def test_language_switch(client: TestClient) -> None:
@@ -188,17 +190,17 @@ def test_accepts_local_origin(client: TestClient) -> None:
 
 
 def test_status_link_survives_url_decoding(client: TestClient, poller: Poller) -> None:
-    poller.store.set_setting("last_poll", NOW.isoformat())
+    poller.store.set_setting("data_version", "2026-10-19T09:00:00+00:00#7")
     page = client.get("/status").text
     link = page.split('hx-get="', 1)[1].split('"', 1)[0]
-    assert "HX-Refresh" not in client.get(link.replace("&amp;", "&")).headers
+    assert "HX-Trigger" not in client.get(link.replace("&amp;", "&")).headers
 
 
-def test_page_reloads_after_the_first_poll(client: TestClient, poller: Poller) -> None:
+def test_page_updates_after_the_first_poll(client: TestClient, poller: Poller) -> None:
     link = client.get("/status").text.split('hx-get="', 1)[1].split('"', 1)[0]
-    assert "HX-Refresh" not in client.get(link).headers
-    poller.store.set_setting("last_poll", NOW.isoformat())
-    assert client.get(link).headers.get("HX-Refresh") == "true"
+    assert "HX-Trigger" not in client.get(link).headers
+    poller.store.set_setting("data_version", "v1")
+    assert client.get(link).headers.get("HX-Trigger") == "repoboard-updated"
 
 
 def test_language_label_and_local_baseline(client: TestClient, poller: Poller) -> None:
@@ -347,3 +349,41 @@ def test_overview_survives_a_broken_saved_sort(poller: Poller, saved: str) -> No
     poller.store.set_setting("overview_sort", saved)
     client = TestClient(create_app(poller), base_url="http://127.0.0.1")
     assert overview_order(client) == ["a/bbb", "b/aaa", "c/ccc"]
+
+
+@pytest.mark.parametrize(
+    ("path", "data"),
+    [
+        ("/items/seen", {"key": "o/r#issue#1"}),
+        ("/items/unseen", {"key": "o/r#issue#1"}),
+        ("/items/snooze", {"key": "o/r#issue#1", "days": "1"}),
+    ],
+)
+def test_item_actions_update_the_page(client: TestClient, poller: Poller, path: str, data: dict[str, str]) -> None:
+    seed(poller)
+    assert client.post(path, data=data).headers["HX-Trigger"] == "repoboard-updated"
+
+
+def test_opening_an_item_marks_it_seen_and_polls_its_repo_again(client: TestClient, poller: Poller) -> None:
+    seed(poller)
+    assert client.post("/items/open", data={"key": "o/r#issue#1"}).status_code == 204
+    assert "Title 1<" not in client.get("/").text
+    assert poller.take_pending() == []
+    assert client.post("/focus").status_code == 204
+    assert poller.take_pending() == ["o/r"]
+
+
+def test_number_and_title_link_to_github(client: TestClient, poller: Poller) -> None:
+    seed(poller)
+    page = client.get("/").text
+    assert (
+        '<a href="https://github.com/o/r/issues/1" target="_blank" rel="noopener" data-key="o/r#issue#1">#1</a>' in page
+    )
+    assert 'data-key="o/r#issue#1">Title 1</a>' in page
+    assert '<colgroup><col class="c-repo">' in page
+
+
+def test_content_reloads_in_place(client: TestClient) -> None:
+    page = client.get("/overview?org=o").text
+    assert 'hx-get="/overview?org=o"' in page
+    assert 'hx-trigger="repoboard-updated from:body"' in page

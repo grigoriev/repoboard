@@ -20,8 +20,9 @@ menu bar, polls the repositories through the `gh` CLI and notifies you about wha
 - Renovate pull requests with green checks that wait for an approval or have no automerge;
 - pull requests with failed checks or conflicts.
 
-The **New** tab lists what changed since you last looked. Mark an item seen: it comes back when
-someone acts on it again. Or snooze it for a day or a week: it comes back when the snooze ends. The
+The **New** tab lists what changed since you last looked. Opening an item marks it seen: it comes
+back when someone acts on it again. Repoboard polls the repositories you opened items of again
+when you come back to it, so a pull request you merged leaves the list at once. Or snooze it for a day or a week: it comes back when the snooze ends. The
 **Overview** tab shows every repository with its open issues, discussions, pull requests and alerts.
 Click a column header to sort by it. A page per repository lists the items.
 
