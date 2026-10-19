@@ -84,7 +84,16 @@
     try { localStorage.setItem(KEY, JSON.stringify(collapsed)); } catch (e) { /* a private window has no storage */ }
   }, true);
 
-  document.addEventListener("DOMContentLoaded", function () { apply(document); });
+  // The tray opens "/?section=<name>": show that section, even one the user collapsed.
+  function reveal() {
+    var name = new URLSearchParams(location.search).get("section");
+    var section = name && document.querySelector('details[data-section="' + CSS.escape(name) + '"]');
+    if (!section) return;
+    section.open = true;
+    section.scrollIntoView({ block: "start" });
+  }
+
+  document.addEventListener("DOMContentLoaded", function () { apply(document); reveal(); });
   document.body.addEventListener("htmx:afterSwap", function (event) { apply(event.detail.target.ownerDocument); });
 })();
 

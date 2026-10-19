@@ -8,6 +8,8 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- A section entry in the tray menu, such as "New: 3", opens the inbox at that section, also a
+  collapsed one.
 - **Settings…** in the tray menu opens the settings page, also in a window that is already open.
 - Settings page: owners with their patterns and repository types and a preview of what they
   match, single repositories, watched links and the general options. It saves the config and
