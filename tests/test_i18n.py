@@ -30,6 +30,7 @@ def test_every_enum_has_a_label() -> None:
         {f"tag.{t}" for t in Tag}
         | {f"kind.{k}" for k in Kind}
         | {f"group.{k}" for k in Kind}
+        | {f"notify.new.{k}" for k in Kind if k is not Kind.ALERT}
         | {f"section.{s}" for s in Section}
     )
     assert expected <= keys

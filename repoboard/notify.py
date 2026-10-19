@@ -43,7 +43,7 @@ def single(entry: Entry, t: Translator) -> Notification:
     if entry.section is Section.REPLIES:
         title = t("notify.reply", login=item.activity_by or "", repo=repo)
     elif entry.section is Section.NEW:
-        title = t("notify.new", kind=t(f"kind.{item.kind}"), repo=repo)
+        title = t(f"notify.new.{item.kind}", repo=repo)  # one key per kind: the adjective follows its gender
     else:
         title = t(f"notify.{entry.section}", repo=repo)
     return Notification(title, item.title, item.url)

@@ -49,6 +49,7 @@ def entry(section: Section, kind: Kind = Kind.ISSUE, number: str = "1") -> Entry
     [
         (Section.NEW, Kind.ISSUE, "New issue in repo"),
         (Section.NEW, Kind.DISCUSSION, "New discussion in repo"),
+        (Section.NEW, Kind.PR, "New pull request in repo"),
         (Section.REPLIES, Kind.ISSUE, "bob replied in repo"),
         (Section.SECURITY, Kind.ALERT, "Security alert in repo"),
         (Section.FAILED, Kind.PR, "Pull request failed in repo"),
@@ -138,3 +139,15 @@ def test_log_notifier(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level("INFO", logger=notify.__name__)
     LogNotifier().send(Notification("T", "B", "u"))
     assert "T: B u" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("kind", "title"),
+    [
+        (Kind.ISSUE, "Neues Issue in repo"),
+        (Kind.DISCUSSION, "Neue Discussion in repo"),
+        (Kind.PR, "Neuer Pull Request in repo"),
+    ],
+)
+def test_german_titles_follow_the_gender(kind: Kind, title: str) -> None:
+    assert build([entry(Section.NEW, kind)], Translator("de"), "u")[0].title == title
