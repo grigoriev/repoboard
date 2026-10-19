@@ -133,5 +133,6 @@
   "type.private": "приватные",
   "type.public": "публичные",
   "action.watch": "Отслеживать",
-  "action.unwatch": "Не отслеживать"
+  "action.unwatch": "Не отслеживать",
+  "tray.settings": "Настройки…"
 }

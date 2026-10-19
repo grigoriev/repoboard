@@ -8,6 +8,7 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Settings…** in the tray menu opens the settings page, also in a window that is already open.
 - Settings page: owners with their patterns and repository types and a preview of what they
   match, single repositories, watched links and the general options. It saves the config and
   applies it without a restart. An eye button on each row watches or unwatches the item.

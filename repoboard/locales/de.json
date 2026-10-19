@@ -133,5 +133,6 @@
   "type.private": "privat",
   "type.public": "öffentlich",
   "action.watch": "Beobachten",
-  "action.unwatch": "Nicht mehr beobachten"
+  "action.unwatch": "Nicht mehr beobachten",
+  "tray.settings": "Einstellungen…"
 }

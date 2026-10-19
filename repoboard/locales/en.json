@@ -133,5 +133,6 @@
   "type.private": "private",
   "type.public": "public",
   "action.watch": "Watch",
-  "action.unwatch": "Stop watching"
+  "action.unwatch": "Stop watching",
+  "tray.settings": "Settings…"
 }
