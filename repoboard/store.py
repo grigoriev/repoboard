@@ -7,7 +7,7 @@ import sqlite3
 import threading
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -166,14 +166,21 @@ class Store:
     def save_watched(self, items: Iterable[Item], now: datetime, repos: set[str] | None = None) -> None:
         """Replace the watched items with the latest poll of them: all, or those of `repos`."""
         with self._tx() as db:
+            previous = {row["key"]: row for row in db.execute("SELECT key, tags, open FROM items WHERE watched = 1")}
             if repos is None:
                 db.execute("DELETE FROM items WHERE watched = 1")
             else:
                 db.executemany("DELETE FROM items WHERE watched = 1 AND repo = ?", [(repo,) for repo in repos])
-            db.executemany(
-                "INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [self._item_row(replace(item, watched=True)) for item in items],
-            )
+            rows = []
+            for item in items:
+                updated = item.updated_at
+                before = previous.get(item.key)
+                # GitHub does not touch updated_at for a failed check or a new conflict. Count the change
+                # here, so the item comes back to the Watched section.
+                if before and (before["tags"], bool(before["open"])) != (",".join(item.tags), item.open):
+                    updated = max(updated, now)
+                rows.append(self._item_row(item, watched=True, updated_at=updated))
+            db.executemany("INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
 
     def forget_repos_except(self, repos: Iterable[str]) -> None:
         keep = list(repos)
@@ -183,7 +190,7 @@ class Store:
             db.execute(f"DELETE FROM repos WHERE repo NOT IN ({marks})", keep)
 
     @staticmethod
-    def _item_row(item: Item) -> tuple[object, ...]:
+    def _item_row(item: Item, watched: bool | None = None, updated_at: datetime | None = None) -> tuple[object, ...]:
         return (
             item.key,
             item.repo,
@@ -194,12 +201,12 @@ class Store:
             item.author,
             int(item.open),
             _ts(item.created_at),
-            _ts(item.updated_at),
+            _ts(updated_at or item.updated_at),
             _ts(item.activity_at),
             item.activity_by,
             ",".join(item.tags),
             int(item.renovate),
-            int(item.watched),
+            int(item.watched if watched is None else watched),
         )
 
     @staticmethod
@@ -337,7 +344,8 @@ class Store:
         for repo in repos:
             state = polled.get(repo)
             items = items_by_repo.get(repo, [])
-            sections = [classify(item) for item in items]
+            # A watched item counts by its state, as it would without the watch.
+            sections = [classify(item, ignore_watch=True) for item in items]
             rows.append(
                 RepoRow(
                     repo=repo,
@@ -345,7 +353,7 @@ class Store:
                     error=state["error"] if state else None,
                     open_issues=sum(1 for i in items if i.kind is Kind.ISSUE and i.open),
                     open_discussions=state["open_discussions"] if state else 0,
-                    open_prs=sum(1 for i in items if i.kind is Kind.PR),
+                    open_prs=sum(1 for i in items if i.kind is Kind.PR and i.open),
                     renovate=sections.count(Section.RENOVATE),
                     failed=sections.count(Section.FAILED),
                     alerts=sections.count(Section.SECURITY),

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -208,7 +207,7 @@ class Collector:
             return [], 0
         return [self._discussion(repo, node) for node in data["discussions"]["nodes"]], data["open"]["totalCount"]
 
-    def _discussion(self, repo: str, node: dict[str, Any]) -> Item:
+    def _discussion(self, repo: str, node: dict[str, Any], watched: bool = False) -> Item:
         author = _login(node.get("author"))
         created = parse_time(node["createdAt"])
         events = [(author, created)]
@@ -229,6 +228,7 @@ class Collector:
             activity_at=activity_at,
             activity_by=activity_by,
             tags=(Tag.ANSWERED,) if node.get("isAnswered") else (),
+            watched=watched,
         )
 
     def watched_items(self, refs: Sequence[ItemRef]) -> tuple[list[Item], dict[str, str]]:
@@ -246,7 +246,7 @@ class Collector:
         if ref.kind == Kind.DISCUSSION:
             owner, name = ref.repo.split("/", 1)
             data = self.gh.graphql(DISCUSSION_QUERY, owner=owner, name=name, number=int(ref.number))
-            return replace(self._discussion(ref.repo, data["data"]["repository"]["discussion"]), watched=True)
+            return self._discussion(ref.repo, data["data"]["repository"]["discussion"], watched=True)
         # REST, not GraphQL: one item at a time, and the polls of whole repositories need the GraphQL quota.
         node = self.gh.json(["api", f"repos/{ref.repo}/issues/{ref.number}"])
         comments = self.gh.paginate(f"repos/{ref.repo}/issues/{ref.number}/comments?per_page=100")

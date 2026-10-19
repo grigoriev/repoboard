@@ -128,17 +128,21 @@ class Poller:
     def watched_errors(self) -> dict[str, str]:
         return dict(json.loads(self.store.get_setting("watched_errors") or "{}"))
 
-    def _poll_watched(self, collector: Collector, now: datetime, repos: set[str] | None) -> None:
-        """Poll the watched items: all of them, or those in `repos` after the user opened one there."""
+    def _poll_watched(self, collector: Collector, now: datetime, repos: set[str] | None) -> int:
+        """Poll the watched items: all of them, or those in `repos` after the user opened one there.
+
+        Returns how many could be read.
+        """
         refs = [parse_item_url(url) for url in self.config.items]
         if repos is not None:
             refs = [ref for ref in refs if ref.repo in repos]
             if not refs:
-                return
+                return 0
         items, errors = collector.watched_items(refs)
         self.store.save_watched(items, now, None if repos is None else {ref.repo for ref in refs})
         if repos is None:
             self.store.set_setting("watched_errors", json.dumps(errors))
+        return len(items)
 
     def last_poll(self) -> datetime | None:
         value = self.store.get_setting("last_poll")
@@ -184,14 +188,14 @@ class Poller:
         if repos is None:
             self.store.forget_repos_except(watched)
             self.store.set_setting("last_poll", now.isoformat())
-        self._poll_watched(collector, now, None if repos is None else set(repos))
+        watched_read = self._poll_watched(collector, now, None if repos is None else set(repos))
         # The UI reloads its content whenever this changes: after a full or a partial poll.
         self.store.set_setting("data_version", f"{now.isoformat()}#{time.monotonic_ns()}")
         self.last_error = None
         if not self.listeners:
             return []  # leave the notifications to a process that delivers them, such as the tray
         fresh = self.store.take_notifications(now, silent=first_run)
-        if any(snapshot.error is None for snapshot in snapshots):
+        if watched_read or any(snapshot.error is None for snapshot in snapshots):
             self.store.set_setting("notified_once", now.isoformat())
         for listener in self.listeners:
             listener(fresh)

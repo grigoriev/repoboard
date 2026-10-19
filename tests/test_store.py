@@ -240,3 +240,24 @@ def test_save_watched_of_some_repositories(store: Store) -> None:
     store.save_watched([item("1", repo="a/a"), item("2", repo="b/b")], NOW)
     store.save_watched([item("3", repo="a/a")], NOW, repos={"a/a"})
     assert sorted(i.key for i in store.items()) == ["a/a#issue#3", "b/b#issue#2"]
+
+
+def test_a_watched_item_comes_back_when_its_state_changes(store: Store) -> None:
+    pr = item("9", Kind.PR, repo="cli/cli")
+    store.save_watched([pr], NOW)
+    store.mark_seen([pr.key], NOW)
+    assert store.inbox(NOW)[Section.WATCHED] == []
+    store.save_watched([pr], NOW + HOUR)  # nothing changed
+    assert store.inbox(NOW + HOUR)[Section.WATCHED] == []
+    store.save_watched([replace(pr, tags=(Tag.CHECKS_FAILURE,))], NOW + 2 * HOUR)
+    assert [e.item.number for e in store.inbox(NOW + 2 * HOUR)[Section.WATCHED]] == ["9"]
+
+
+def test_overview_counts_watched_pull_requests_by_their_state(store: Store) -> None:
+    items = (item("1", Kind.PR, tags=(Tag.CHECKS_FAILURE,)),)
+    store.save_snapshots([RepoSnapshot("o/r", items)], NOW)
+    store.save_watched(
+        [item("1", Kind.PR, tags=(Tag.CHECKS_FAILURE,)), item("2", Kind.PR, open=False, tags=(Tag.MERGED,))], NOW
+    )
+    (row,) = store.overview(["o/r"], NOW)
+    assert (row.open_prs, row.failed) == (1, 1)

@@ -467,3 +467,11 @@ def test_partial_poll_refreshes_watched_items_of_the_touched_repository(store: S
     poller.poll(["other/repo"])
     assert runner.calls == []
     assert [i.number for i in store.items()] == ["7"]
+
+
+def test_a_config_with_only_watched_items_notifies(store: Store) -> None:
+    runner = FakeGhRunner({"api user": {"login": "me"}, **watched_routes(), **empty_repo_routes()})
+    poller = Poller(Config(items=("https://github.com/cli/cli/issues/7",)), store, Gh(runner), Clock())
+    poller.listeners.append(lambda entries: None)
+    poller.poll()
+    assert store.get_setting("notified_once") is not None

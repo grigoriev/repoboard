@@ -25,8 +25,8 @@ _WAITING_TAGS = frozenset({Tag.REVIEW_REQUIRED, Tag.NO_AUTOMERGE, Tag.BLOCKED, T
 _BROKEN_TAGS = frozenset({Tag.CHECKS_FAILURE, Tag.CONFLICT})
 
 
-def classify(item: Item) -> Section | None:
-    if item.watched:
+def classify(item: Item, ignore_watch: bool = False) -> Section | None:
+    if item.watched and not ignore_watch:
         return Section.WATCHED  # any change counts: a reply, a merge, a failed check
     if item.kind is Kind.ALERT:
         return Section.SECURITY
