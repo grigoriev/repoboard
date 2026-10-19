@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from importlib import resources
@@ -16,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from pydantic import BaseModel
 
+from repoboard import window
 from repoboard.config import LANGUAGES, config_path
 from repoboard.i18n import LANGUAGE_NAMES, Translator
 from repoboard.models import Item, Kind
@@ -27,8 +29,10 @@ LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost"})
 KIND_ORDER = (Kind.ALERT, Kind.PR, Kind.ISSUE, Kind.DISCUSSION)
 SNOOZE_DAYS = (1, 7)
 ZOOM_MIN, ZOOM_MAX, ZOOM_STEP = 0.6, 2.0, 0.1
-WINDOW_DEFAULT = {"width": 1200, "height": 820, "x": None, "y": None}
-WINDOW_LIMITS = {"width": (400, 8000), "height": (300, 8000), "x": (-20000, 20000), "y": (-20000, 20000)}
+WINDOW_DEFAULT = {"width": window.WIDTH, "height": window.HEIGHT}
+WINDOW_LIMITS = {"width": (400, 8000), "height": (300, 8000)}
+# Requests that a browser marks as coming from another site, such as an <img> on a foreign page.
+FOREIGN_SITES = frozenset({"cross-site", "same-site"})
 
 # Overview columns: the sort key of a row, and the direction of the first click.
 SORT_COLUMNS: dict[str, tuple[Callable[[RepoRow], Any], str]] = {
@@ -44,11 +48,9 @@ SORT_COLUMNS: dict[str, tuple[Callable[[RepoRow], Any], str]] = {
 }
 
 
-class WindowGeometry(BaseModel):
+class WindowSize(BaseModel):
     width: int | None = None
     height: int | None = None
-    x: int | None = None
-    y: int | None = None
 
 
 def sort_rows(rows: list[RepoRow], column: str, direction: str) -> list[RepoRow]:
@@ -124,14 +126,17 @@ class Web:
             value = float(self.store.get_setting("zoom") or 1.0)
         except ValueError:
             value = 1.0
-        return clamp(value, ZOOM_MIN, ZOOM_MAX)
+        return clamp(value, ZOOM_MIN, ZOOM_MAX) if math.isfinite(value) else 1.0
 
-    def window_geometry(self) -> dict[str, int | None]:
+    def window_size(self) -> dict[str, int]:
         try:
             saved = json.loads(self.store.get_setting("window") or "{}")
         except ValueError:
             saved = {}
-        return {key: saved.get(key, default) for key, default in WINDOW_DEFAULT.items()}
+        if not isinstance(saved, dict):
+            saved = {}
+        return {key: value if isinstance(value := saved.get(key), int) else default
+                for key, default in WINDOW_DEFAULT.items()}  # fmt: skip
 
     def owners(self) -> list[str]:
         return sorted({repo.split("/", 1)[0] for repo in self.config.repos}, key=str.lower)
@@ -170,10 +175,13 @@ def create_app(poller: Poller) -> FastAPI:
 
 
 async def local_only(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-    # Refuse DNS rebinding (a foreign Host) and cross-site form posts (a foreign Origin).
+    # Refuse DNS rebinding (a foreign Host) and requests another site makes the browser send.
     host = (request.headers.get("host") or "").rsplit(":", 1)[0]
     origin = request.headers.get("origin")
-    if host not in LOCAL_HOSTS or (origin and urlsplit(origin).hostname not in LOCAL_HOSTS):
+    foreign = request.headers.get("sec-fetch-site") in FOREIGN_SITES or (
+        origin and urlsplit(origin).hostname not in LOCAL_HOSTS
+    )
+    if host not in LOCAL_HOSTS or foreign:
         return Response("Forbidden", status_code=403)
     return await call_next(request)
 
@@ -278,13 +286,13 @@ def add_settings(app: FastAPI, web: Web) -> None:
         return {"zoom": value}
 
     @app.get("/window")
-    def get_window() -> dict[str, int | None]:
-        return web.window_geometry()
+    def get_window() -> dict[str, int]:
+        return web.window_size()
 
     @app.post("/window")
-    def set_window(geometry: WindowGeometry) -> dict[str, int | None]:
-        merged = web.window_geometry()
-        for key, value in geometry.model_dump().items():
+    def set_window(size: WindowSize) -> dict[str, int]:
+        merged = web.window_size()
+        for key, value in size.model_dump().items():
             if value is not None:
                 merged[key] = int(clamp(value, *WINDOW_LIMITS[key]))
         web.store.set_setting("window", json.dumps(merged))

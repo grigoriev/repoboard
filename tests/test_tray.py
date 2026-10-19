@@ -114,9 +114,9 @@ class FakeResponse(io.BytesIO):
 
 
 def test_load_geometry(monkeypatch: pytest.MonkeyPatch) -> None:
-    body = b'{"width": 1500, "height": 900, "x": 5, "y": 6}'
+    body = b'{"width": 1500, "height": 900}'
     monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout: FakeResponse(body))
-    assert window.load_geometry("http://127.0.0.1:1/") == {"width": 1500, "height": 900, "x": 5, "y": 6}
+    assert window.load_geometry("http://127.0.0.1:1/") == {"width": 1500, "height": 900}
 
 
 def test_load_geometry_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -143,26 +143,44 @@ def test_save_geometry_posts_json(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_geometry_saver_coalesces_events() -> None:
-    saved: list[dict[str, int | None]] = []
+    saved: list[dict[str, int]] = []
     done = threading.Event()
 
-    def save(values: dict[str, int | None]) -> None:
+    def save(values: dict[str, int]) -> None:
         saved.append(values)
         done.set()
 
     saver = window.GeometrySaver(save, delay=0.05)
     saver.resized(1000, 700)
     saver.resized(1100.4, 749.6)
-    saver.moved(10, 20)
     assert done.wait(2)
-    assert saved == [{"width": 1100, "height": 750, "x": 10, "y": 20}]
+    assert saved == [{"width": 1100, "height": 750}]
     saver.flush()
     assert len(saved) == 1
 
 
 def test_geometry_saver_stores_the_content_height() -> None:
-    saved: list[dict[str, int | None]] = []
+    saved: list[dict[str, int]] = []
     saver = window.GeometrySaver(saved.append, delay=10, title_bar=28)
     saver.resized(1000, 728)
     saver.flush()
     assert saved == [{"width": 1000, "height": 700}]
+
+
+def test_geometry_saver_skips_fullscreen() -> None:
+    saved: list[dict[str, int]] = []
+    fullscreen = True
+    saver = window.GeometrySaver(saved.append, delay=10, skip=lambda: fullscreen)
+    saver.resized(2560, 1440)
+    saver.flush()
+    assert saved == []
+    fullscreen = False
+    saver.resized(1000, 700)
+    saver.flush()
+    assert saved == [{"width": 1000, "height": 700}]
+
+
+def test_window_defaults_have_one_source() -> None:
+    from repoboard.web import app
+
+    assert app.WINDOW_DEFAULT == {"width": window.WIDTH, "height": window.HEIGHT}

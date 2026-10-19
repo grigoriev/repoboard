@@ -52,3 +52,13 @@ def title_bar_height() -> float:  # pragma: no cover - needs AppKit
     )
     content = NSMakeRect(0, 0, 100, 100)
     return float(NSWindow.frameRectForContentRect_styleMask_(content, style).size.height - 100)
+
+
+def is_fullscreen(window: object) -> bool:  # pragma: no cover - needs AppKit
+    """Whether a pywebview window is in macOS fullscreen."""
+    try:
+        from AppKit import NSWindowStyleMaskFullScreen
+    except ImportError:
+        return False
+    native = getattr(window, "native", None)
+    return bool(native is not None and native.styleMask() & NSWindowStyleMaskFullScreen)
