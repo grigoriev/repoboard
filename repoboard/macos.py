@@ -27,3 +27,28 @@ def brand_process(menu_bar_only: bool) -> None:  # pragma: no cover - needs AppK
     app.setApplicationIconImage_(NSImage.alloc().initWithContentsOfFile_(icon_path()))
     if menu_bar_only:
         app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+
+
+def title_bar_height() -> float:  # pragma: no cover - needs AppKit
+    """Height of a standard window title bar: the frame of a titled window minus its content."""
+    if sys.platform != "darwin":
+        return 0
+    try:
+        from AppKit import (
+            NSMakeRect,
+            NSWindow,
+            NSWindowStyleMaskClosable,
+            NSWindowStyleMaskMiniaturizable,
+            NSWindowStyleMaskResizable,
+            NSWindowStyleMaskTitled,
+        )
+    except ImportError:
+        return 0
+    style = (
+        NSWindowStyleMaskTitled
+        | NSWindowStyleMaskClosable
+        | NSWindowStyleMaskMiniaturizable
+        | NSWindowStyleMaskResizable
+    )
+    content = NSMakeRect(0, 0, 100, 100)
+    return float(NSWindow.frameRectForContentRect_styleMask_(content, style).size.height - 100)

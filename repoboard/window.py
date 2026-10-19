@@ -63,15 +63,20 @@ def save_geometry(base_url: str, geometry: Geometry) -> None:
 class GeometrySaver:
     """Collects resize and move events and saves once they settle, not on every pixel."""
 
-    def __init__(self, save: Callable[[Geometry], None], delay: float = SAVE_DELAY_SECONDS) -> None:
+    def __init__(
+        self, save: Callable[[Geometry], None], delay: float = SAVE_DELAY_SECONDS, title_bar: float = 0
+    ) -> None:
         self._save = save
+        # pywebview reports the frame height on resize but opens a window with that height as content.
+        self._title_bar = title_bar
         self._delay = delay
         self._pending: Geometry = {}
         self._timer: threading.Timer | None = None
         self._lock = threading.Lock()
 
     def resized(self, width: float, height: float) -> None:
-        self._update({"width": round(width), "height": round(height)})  # AppKit reports points as floats
+        # AppKit reports points as floats.
+        self._update({"width": round(width), "height": round(height - self._title_bar)})
 
     def moved(self, x: float, y: float) -> None:
         self._update({"x": round(x), "y": round(y)})
@@ -99,7 +104,7 @@ def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens
     except ImportError:
         webbrowser.open(url)
         return
-    from repoboard.macos import brand_process
+    from repoboard.macos import brand_process, title_bar_height
 
     brand_process(menu_bar_only=False)
     geometry: dict[str, Any] = load_geometry(url)
@@ -107,7 +112,7 @@ def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens
         "Repoboard", url, width=geometry["width"], height=geometry["height"], x=geometry["x"], y=geometry["y"]
     )
     assert window is not None
-    saver = GeometrySaver(lambda values: save_geometry(url, values))
+    saver = GeometrySaver(lambda values: save_geometry(url, values), title_bar=title_bar_height())
     window.events.resized += saver.resized
     window.events.moved += saver.moved
     window.events.closing += saver.flush

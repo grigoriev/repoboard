@@ -158,3 +158,11 @@ def test_geometry_saver_coalesces_events() -> None:
     assert saved == [{"width": 1100, "height": 750, "x": 10, "y": 20}]
     saver.flush()
     assert len(saved) == 1
+
+
+def test_geometry_saver_stores_the_content_height() -> None:
+    saved: list[dict[str, int | None]] = []
+    saver = window.GeometrySaver(saved.append, delay=10, title_bar=28)
+    saver.resized(1000, 728)
+    saver.flush()
+    assert saved == [{"width": 1000, "height": 700}]
