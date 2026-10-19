@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import re
 import threading
 from collections.abc import Callable
@@ -26,6 +27,7 @@ UPDATED = {"HX-Trigger": "repoboard-updated"}
 _SEPARATORS = re.compile(r"[\s,]+")
 _LIST_SEPARATORS = re.compile(r"[,\n]+")  # for names that may hold a space, such as "Semgrep OSS"
 WHOLE_NUMBERS = "settings.whole_numbers"  # a catalog key: the page translates this error
+CHANGED = "settings.changed"  # a catalog key too
 
 
 def words(text: str) -> tuple[str, ...]:
@@ -127,6 +129,18 @@ def current_config(web: Web) -> Config:
     return config.load(path) if path.exists() else web.poller.config
 
 
+def version(cfg: Config) -> str:
+    """A fingerprint of the config a form shows. A save from an older form would drop newer edits."""
+    return hashlib.sha256(config.dump(cfg).encode()).hexdigest()[:16]
+
+
+def file_version(web: Web) -> str:
+    try:
+        return version(current_config(web))
+    except ConfigError:
+        return ""  # a broken file: the save reports it
+
+
 def apply(web: Web, edit: Callable[[Config], Config]) -> Config:
     """Edit the config file, save it and hand it to the poller, which lists the owners again on its next poll."""
     with EDITS:
@@ -139,7 +153,12 @@ def apply(web: Web, edit: Callable[[Config], Config]) -> Config:
 
 def add_settings_page(app: FastAPI, web: Web) -> None:
     def page(
-        request: Request, cfg: Config | Draft, error: str | None = None, status: int = 200, chosen: str | None = None
+        request: Request,
+        cfg: Config | Draft,
+        error: str | None = None,
+        status: int = 200,
+        chosen: str | None = None,
+        shown: str = "",
     ) -> HTMLResponse:
         response = web.render(
             request,
@@ -153,6 +172,7 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
             watched_errors=web.poller.watched_errors(),
             # render() sets `language` to the language in use; a rejected save shows the one picked instead.
             chosen_language=chosen,
+            version=shown,
         )
         response.status_code = status
         return response
@@ -160,20 +180,30 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
     @app.get("/settings", response_class=HTMLResponse)
     def show(request: Request) -> HTMLResponse:
         try:
-            return page(request, current_config(web))
+            current = current_config(web)
+            return page(request, current, shown=version(current))
         except ConfigError as exc:
             return page(request, web.poller.config, error=str(exc))
 
     @app.post("/settings", response_model=None)
     async def save(request: Request) -> Response:
         form = await read_multi_form(request)
+
+        def edit(current: Config) -> Config:
+            shown = form.get("version", [""])[0]
+            if shown and shown != version(current):
+                raise ConfigError(CHANGED)
+            return form_to_config(form, current)
+
         try:
-            updated = apply(web, lambda current: form_to_config(form, current))
+            updated = apply(web, edit)
         except (ConfigError, OSError) as exc:
             t = web.translator()
-            reason = t(str(exc)) if str(exc) == WHOLE_NUMBERS else str(exc)
+            reason = t(str(exc)) if str(exc) in (WHOLE_NUMBERS, CHANGED) else str(exc)
             draft = form_draft(form, web.poller.config)
-            return page(request, draft, error=t("settings.not_saved", error=reason), status=400, chosen=draft.language)
+            error = t("settings.not_saved", error=reason)
+            # The draft carries the version of the file now: the next save is a choice made with the warning seen.
+            return page(request, draft, error=error, status=400, chosen=draft.language, shown=file_version(web))
         # The page sets the language, so the choice of the header switcher must not override it.
         web.store.set_setting("language", updated.language)
         return RedirectResponse("/settings?saved=1", status_code=303)

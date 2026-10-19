@@ -296,3 +296,35 @@ def test_a_broken_config_file_shows_its_error(client: TestClient, config_file: P
     page = client.get("/settings").text
     assert html.escape(str(error.value), quote=False) in page
     assert "cli/cli" in page  # the config the app runs with
+    response = client.post("/settings", data={"repos": "cli/cli\nnew/repo", "language": "en"})
+    assert response.status_code == 400
+    assert html.escape(str(error.value), quote=False) in response.text
+    assert "new/repo" in response.text
+    assert config_file.read_text(encoding="utf-8") == "repos = ["
+
+
+def form_version(page: str) -> str:
+    return page.split('name="version" value="', 1)[1].split('"', 1)[0]
+
+
+def test_a_stale_form_does_not_drop_a_new_watch(client: TestClient, config_file: Path) -> None:
+    version = form_version(client.get("/settings").text)
+    client.post("/items/watch", data={"url": "https://github.com/cli/cli/issues/7"})  # in another tab
+    response = client.post("/settings", data={"repos": "cli/cli", "language": "en", "version": version})
+    assert response.status_code == 400
+    assert "changed since this page opened" in response.text
+    assert "https://github.com/cli/cli/issues/7" in config.load(config_file).items
+    again = client.post(
+        "/settings",
+        data={"repos": "cli/cli", "language": "en", "version": form_version(response.text)},
+        follow_redirects=False,
+    )
+    assert again.status_code == 303
+
+
+def test_a_current_form_saves(client: TestClient) -> None:
+    version = form_version(client.get("/settings").text)
+    response = client.post(
+        "/settings", data={"repos": "cli/cli", "language": "en", "version": version}, follow_redirects=False
+    )
+    assert response.status_code == 303

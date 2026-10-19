@@ -3,6 +3,7 @@
 {% block live %}{% endblock %}
 {% block main %}
 <form class="settings" method="post" action="/settings">
+  <input type="hidden" name="version" value="{{ version }}">
   {% if saved %}<p class="note ok">{{ t("settings.saved") }}</p>{% endif %}
   {% if error %}<p class="note error">{{ error }}</p>{% endif %}
 
