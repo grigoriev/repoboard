@@ -11,3 +11,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Project scaffold: uv, ruff, mypy, pytest.
 - TOML config with the repositories, language and poll interval, and an import from the Alfred
   GitHub workflow list.
+- Collector over the `gh` CLI: issues, pull requests, discussions and security alerts of each
+  repository, with the latest reply by someone else.
