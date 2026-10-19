@@ -7,14 +7,14 @@ name = "repoboard"
 version = "0.1.0"
 description = "Daily overview of the GitHub repositories you work with, in the menu bar."
 readme = "README.md"
-license = "Apache-2.0"
+license = "MIT"
 authors = [
     { name = "Sergey Grigoriev", email = "grigoriev@fastmail.com" }
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Typing :: Typed",
 ]
