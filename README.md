@@ -16,7 +16,8 @@ someone acts on it again. Or snooze it for a day or a week: it comes back when t
 **Overview** tab shows every repository with its open issues, discussions, pull requests and alerts,
 and a page per repository lists them.
 
-The UI speaks English, Russian and German.
+The UI speaks English, Russian and German. Change the text size with A- and A+ in the header, or
+with Cmd or Ctrl and +, - or 0.
 
 ## Requirements
 

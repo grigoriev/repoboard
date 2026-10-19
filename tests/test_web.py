@@ -71,7 +71,7 @@ def test_item_ref() -> None:
     assert item_ref(item("5")) == "#5"
     assert item_ref(item("17", Kind.DISCUSSION)) == "D17"
     assert item_ref(item("code_scanning/2", Kind.ALERT, author="CodeQL")) == "CodeQL"
-    assert str(short_repo("o/<r>")) == '<span class="owner">o/</span>&lt;r&gt;'
+    assert str(short_repo("o/<r>")) == '<span class="owner">o/</span><wbr>&lt;r&gt;'
 
 
 def test_inbox_empty_and_no_repos(client: TestClient, poller: Poller) -> None:
@@ -206,3 +206,38 @@ def test_language_label_and_local_baseline(client: TestClient, poller: Poller) -
     assert 'aria-label="Sprache"' in page
     local = (NOW - timedelta(days=7)).astimezone().strftime("%Y-%m-%d %H:%M")
     assert f"Neu seit {local}" in page
+
+
+def test_text_size_defaults_to_one(client: TestClient) -> None:
+    page = client.get("/").text
+    assert "--zoom: 1.0" in page
+    assert 'aria-label="Larger text"' in page
+
+
+@pytest.mark.parametrize(
+    ("steps", "expected"),
+    [
+        (["in"], "1.1"),
+        (["in", "in", "out"], "1.1"),
+        (["out"], "0.9"),
+        (["in", "reset"], "1.0"),
+        (["in"] * 20, "2.0"),
+        (["out"] * 20, "0.6"),
+    ],
+)
+def test_text_size_steps_and_limits(client: TestClient, poller: Poller, steps: list[str], expected: str) -> None:
+    for step in steps:
+        response = client.post("/zoom", data={"step": step})
+        assert response.status_code == 200
+    assert response.json() == {"zoom": float(expected)}
+    assert poller.store.get_setting("zoom") == expected
+    assert f"--zoom: {expected}" in client.get("/overview").text
+
+
+def test_text_size_ignores_unknown_step(client: TestClient) -> None:
+    assert client.post("/zoom", data={"step": "huge"}).json() == {"zoom": 1.0}
+
+
+def test_text_size_survives_a_broken_setting(client: TestClient, poller: Poller) -> None:
+    poller.store.set_setting("zoom", "big")
+    assert "--zoom: 1.0" in client.get("/").text

@@ -23,3 +23,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Commands `repoboard serve`, `repoboard poll` and `repoboard import-alfred`.
 - Menu bar mode, the default on macOS: unseen count on the icon, sections in the menu, refresh,
   a native window with pywebview, and desktop notifications about new items.
+- Text size control: A- and A+ in the header, or Cmd or Ctrl with +, - and 0. The UI uses the
+  full window width, and long repository names wrap instead of being cut.
