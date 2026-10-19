@@ -78,7 +78,7 @@
 
   document.addEventListener("toggle", function (event) {
     var section = event.target;
-    if (!section.matches || !section.matches("details[data-section]")) return;
+    if (!section.matches?.("details[data-section]")) return;
     if (section.open) delete collapsed[section.dataset.section];
     else collapsed[section.dataset.section] = true;
     try { localStorage.setItem(KEY, JSON.stringify(collapsed)); } catch (e) { /* a private window has no storage */ }
