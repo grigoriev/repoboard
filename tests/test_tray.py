@@ -12,6 +12,7 @@ import pytest
 from repoboard.config import Config
 from repoboard.gh import Gh
 from repoboard.i18n import Translator
+from repoboard.macos import icon_path as app_icon_path
 from repoboard.models import Item, Kind, RepoSnapshot
 from repoboard.poller import Poller
 from repoboard.store import Store
@@ -50,8 +51,9 @@ def test_state_with_items(poller: Poller) -> None:
     assert tray_state(poller, Translator()).status.startswith("Polling")
 
 
-def test_icon_exists() -> None:
+def test_icons_exist() -> None:
     assert Path(icon_path()).is_file()
+    assert Path(app_icon_path()).read_bytes().startswith(b"\x89PNG")
 
 
 class FakeProcess:

@@ -37,6 +37,9 @@ def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens
     except ImportError:
         webbrowser.open(url)
         return
+    from repoboard.macos import brand_process
+
+    brand_process(menu_bar_only=False)
     webview.create_window("Repoboard", url, width=WIDTH, height=HEIGHT)
     webview.start()
 

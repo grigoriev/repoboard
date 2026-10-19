@@ -25,3 +25,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   a native window with pywebview, and desktop notifications about new items.
 - Text size control: A- and A+ in the header, or Cmd or Ctrl with +, - and 0. The UI uses the
   full window width, and long repository names wrap instead of being cut.
+- App icon. The window shows it and the name Repoboard in Cmd-Tab and the Dock. The menu bar
+  process stays out of Cmd-Tab.

@@ -88,5 +88,5 @@ warn_unused_configs = true
 show_error_codes = true
 
 [[tool.mypy.overrides]]
-module = ["rumps", "webview", "desktop_notifier"]
+module = ["rumps", "webview", "desktop_notifier", "AppKit", "Foundation"]
 ignore_missing_imports = true
