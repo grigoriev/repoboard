@@ -15,3 +15,4 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   repository, with the latest reply by someone else.
 - SQLite store with inbox sections (security, failed, Renovate, new, replies), seen and snooze
   marks, notification tracking and a per-repository overview.
+- English, Russian and German translations. English is the default.
