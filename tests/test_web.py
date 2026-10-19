@@ -123,7 +123,8 @@ def test_seen_all_redirects(client: TestClient, poller: Poller) -> None:
 def test_overview(client: TestClient, poller: Poller) -> None:
     seed(poller)
     page = client.get("/overview").text
-    assert 'href="/repo/o/r"' in page and 'title="o/r"' in page
+    assert 'href="/repo/o/r"' in page
+    assert 'title="o/r"' in page
     assert 'title="gone"' in page
     assert "x/y" not in client.get("/overview?org=o").text
 
@@ -131,7 +132,8 @@ def test_overview(client: TestClient, poller: Poller) -> None:
 def test_repo_page(client: TestClient, poller: Poller) -> None:
     seed(poller)
     page = client.get("/repo/o/r").text
-    assert "Title 3" in page and "Title 17" in page
+    assert "Title 3" in page
+    assert "Title 17" in page
     assert "Secret scanning: no access to security alerts" in page
     assert "Title 9" not in page
     assert "Could not read the repository: gone" in client.get("/repo/x/y").text
@@ -211,7 +213,7 @@ def test_language_label_and_local_baseline(client: TestClient, poller: Poller) -
 def test_text_size_defaults_to_one(client: TestClient) -> None:
     page = client.get("/").text
     assert "--zoom: 1.0" in page
-    assert 'aria-label="Larger text"' in page
+    assert '>A+<span class="sr-only"> Larger text</span>' in page
 
 
 @pytest.mark.parametrize(

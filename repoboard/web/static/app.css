@@ -95,5 +95,5 @@ tr.htmx-swapping { opacity: 0; transition: opacity .3s; }
 h1 { font-size: 20px; margin: 0; font-family: var(--mono); font-weight: 600; }
 h2 { font-size: 15px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); }
 .repo-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { .sec summary::before, tr.htmx-swapping { transition: none; } }
 @media (max-width: 640px) { .top, main { padding-left: 12px; padding-right: 12px; } }
