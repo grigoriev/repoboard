@@ -22,8 +22,6 @@
   "inbox.empty": "Ничего нового. Всё просмотрено.",
   "action.seen": "Просмотрено",
   "action.unseen": "Вернуть в новое",
-  "action.snooze_day": "На день",
-  "action.snooze_week": "На неделю",
   "action.snooze_day_hint": "Отложить на день",
   "action.snooze_week_hint": "Отложить на неделю",
   "action.unsnooze": "Не откладывать",
