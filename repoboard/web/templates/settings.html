@@ -53,7 +53,7 @@
   <section class="panel general">
     <h2>{{ t("settings.general") }}</h2>
     <label>{{ t("settings.language") }}
-      <select name="language">{% for code, name in languages %}<option value="{{ code }}" {{ 'selected' if code == language }}>{{ name }}</option>{% endfor %}</select></label>
+      <select name="language">{% for code, name in languages %}<option value="{{ code }}" {{ 'selected' if code == (chosen_language or language) }}>{{ name }}</option>{% endfor %}</select></label>
     <label>{{ t("settings.poll_interval") }} <input name="poll_interval_minutes" type="number" min="1" value="{{ cfg.poll_interval_minutes }}"></label>
     <label>{{ t("settings.lookback") }} <input name="lookback_days" type="number" min="1" value="{{ cfg.lookback_days }}"></label>
     <label>{{ t("settings.hidden_tools") }} <input name="hidden_alert_tools" value="{{ cfg.hidden_alert_tools | join(', ') }}"></label>

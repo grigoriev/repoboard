@@ -124,7 +124,9 @@ def apply(web: Web, updated: Config) -> None:
 
 
 def add_settings_page(app: FastAPI, web: Web) -> None:
-    def page(request: Request, cfg: Config | Draft, error: str | None = None, status: int = 200) -> HTMLResponse:
+    def page(
+        request: Request, cfg: Config | Draft, error: str | None = None, status: int = 200, chosen: str | None = None
+    ) -> HTMLResponse:
         response = web.render(
             request,
             "settings.html",
@@ -135,6 +137,8 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
             repo_types=REPO_TYPES,
             discovery_errors=web.poller.discovery_errors(),
             watched_errors=web.poller.watched_errors(),
+            # render() sets `language` to the language in use; a rejected save shows the one picked instead.
+            chosen_language=chosen,
         )
         response.status_code = status
         return response
@@ -152,7 +156,7 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
             t = web.translator()
             reason = t(str(exc)) if str(exc) == WHOLE_NUMBERS else str(exc)
             draft = form_draft(form, web.poller.config)
-            return page(request, draft, error=t("settings.not_saved", error=reason), status=400)
+            return page(request, draft, error=t("settings.not_saved", error=reason), status=400, chosen=draft.language)
         apply(web, updated)
         # The page sets the language, so the choice of the header switcher must not override it.
         web.store.set_setting("language", updated.language)

@@ -211,3 +211,10 @@ def test_a_rejected_save_keeps_what_was_typed(client: TestClient) -> None:
     assert "https://github.com/o/r/issues/1" in page
     assert 'value="15"' in page
     assert 'value="Semgrep OSS"' in page
+
+
+def test_a_rejected_save_keeps_the_chosen_language(client: TestClient) -> None:
+    page = client.post("/settings", data={"repos": "not a repo", "language": "de"}).text
+    # The header switcher keeps the language in use; the settings field shows the one picked.
+    assert page.count('value="de" selected') == 1
+    assert page.count('value="en" selected') == 1
