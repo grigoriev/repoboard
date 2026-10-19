@@ -82,6 +82,7 @@ td.act { width: 1%; white-space: nowrap; text-align: right; }
 .pill.closed { color: var(--closed); } .pill.muted { color: var(--muted); }
 .unread::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 8px; vertical-align: middle; }
 tr.htmx-swapping { opacity: 0; transition: opacity .3s; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .empty { padding: 28px 14px; text-align: center; color: var(--muted); }
 .note { color: var(--muted); font-size: 13px; }
 .note.error { color: var(--bad); }

@@ -30,17 +30,16 @@ class Window:
             self._process.terminate()
 
 
-def main(argv: Sequence[str] | None = None) -> int:  # pragma: no cover - opens a native window
+def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens a native window
     url = (argv or sys.argv[1:])[0]
     try:
         import webview
     except ImportError:
         webbrowser.open(url)
-        return 0
+        return
     webview.create_window("Repoboard", url, width=WIDTH, height=HEIGHT)
     webview.start()
-    return 0
 
 
 if __name__ == "__main__":  # pragma: no cover
-    raise SystemExit(main())
+    main()

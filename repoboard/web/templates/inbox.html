@@ -19,7 +19,12 @@
   {% for section, entries in sections if entries %}
   <details class="sec" open>
     <summary><span class="stripe {{ section.value }}"></span>{{ t("section." ~ section.value) }} <span class="count">{{ entries | length }}</span></summary>
-    <div class="rows"><table><tbody>
+    <div class="rows"><table>
+    <thead class="sr-only"><tr>
+      <th scope="col">{{ t("column.repo") }}</th><th scope="col">{{ t("column.ref") }}</th><th scope="col">{{ t("column.title") }}</th>
+      <th scope="col">{{ t("column.status") }}</th><th scope="col">{{ t("column.age") }}</th><th scope="col">{{ t("column.actions") }}</th>
+    </tr></thead>
+    <tbody>
       {% for entry in entries %}{{ item_row(t, age, ref, short_repo, entry.item, entry, snooze_days=snooze_days) }}{% endfor %}
     </tbody></table></div>
   </details>

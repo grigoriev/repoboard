@@ -17,7 +17,12 @@
 {% set ns.any = true %}
 <section class="panel">
   <h2>{{ t("group." ~ kind.value) }} <span class="count">{{ items | length }}</span></h2>
-  <div class="rows"><table><tbody>
+  <div class="rows"><table>
+    <thead class="sr-only"><tr>
+      <th scope="col">{{ t("column.ref") }}</th><th scope="col">{{ t("column.title") }}</th>
+      <th scope="col">{{ t("column.status") }}</th><th scope="col">{{ t("column.age") }}</th><th scope="col">{{ t("column.actions") }}</th>
+    </tr></thead>
+    <tbody>
     {% for item in items %}{{ item_row(t, age, ref, short_repo, item, entries.get(item.key), show_repo=False, snooze_days=snooze_days) }}{% endfor %}
   </tbody></table></div>
 </section>

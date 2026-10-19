@@ -85,7 +85,16 @@ def test_inbox_empty_and_no_repos(client: TestClient, poller: Poller) -> None:
 def test_inbox_lists_sections(client: TestClient, poller: Poller) -> None:
     seed(poller)
     page = client.get("/").text
-    for text in ("Security", "Failed PRs", "New replies", "reply by bob", "D17", "checks failed", "Last poll now"):
+    for text in (
+        "Security",
+        "Failed PRs",
+        "New replies",
+        "reply by bob",
+        "D17",
+        "checks failed",
+        "Last poll now",
+        "<th",
+    ):
         assert text in page
     assert "Title 9" not in page
     assert "Title 1" not in client.get("/?org=x").text
