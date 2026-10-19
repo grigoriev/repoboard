@@ -20,7 +20,23 @@ database = "~/.local/state/repoboard/repoboard.sqlite3"
 # not vulnerabilities. Set it to [] to see every alert.
 hidden_alert_tools = ["Scorecard"]
 
-# Repositories to watch, as "owner/name".
+# Single repositories to watch, as "owner/name".
 repos = [
-    "grigoriev/repoboard",
+    "cli/cli",
 ]
+
+# Every repository of a user or organization. New repositories join on their own; Repoboard
+# lists them again every hour. Patterns match the repository name, * and ? as wildcards.
+# exclude_types takes archived, fork, mirror, template, private and public; the default leaves
+# out archived repositories and forks.
+[[owners]]
+name = "grigoriev"
+
+[[owners]]
+name = "intechcore"
+exclude = ["articles"]
+
+[[owners]]
+name = "SchweizerischeBundesbahnen"
+include = ["ch.sbb.polarion.*", "*polarion*"]
+exclude_types = ["archived", "fork", "private"]

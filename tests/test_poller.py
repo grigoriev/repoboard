@@ -220,3 +220,213 @@ def test_background_thread_polls_touched_repositories(store: Store) -> None:
         assert polled.wait(5)
     finally:
         poller.stop()
+
+
+def owner_repo(name: str, **flags: Any) -> dict[str, Any]:
+    return {"full_name": name, "archived": False, "fork": False, "mirror_url": None, "is_template": False,
+            "private": False, **flags}  # fmt: skip
+
+
+def test_owners_are_discovered_and_new_repositories_reported(store: Store) -> None:
+    from repoboard.config import Owner
+
+    clock = Clock()
+    listing = [[owner_repo("acme/a"), owner_repo("acme/old", archived=True)]]
+    runner = FakeGhRunner({"api user": {"login": "me"}, "orgs/acme/repos": lambda call: listing, **empty_repo_routes()})
+    poller = Poller(Config(repos=("cli/cli",), owners=(Owner("acme"),)), store, Gh(runner), clock)
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    assert poller.repos() == ("cli/cli",)
+    poller.poll()
+    assert poller.repos() == ("acme/a", "cli/cli")
+    assert polled_repos(runner) == {"acme/a", "cli/cli"}
+    assert added == []  # the first discovery reports nothing
+    listing[0].append(owner_repo("acme/b"))
+    clock.now = NOW + timedelta(minutes=30)
+    poller.poll()
+    assert "acme/b" not in poller.repos()  # the listing is cached for an hour
+    clock.now = NOW + timedelta(hours=2)
+    poller.poll()
+    assert poller.repos() == ("acme/a", "acme/b", "cli/cli")
+    assert added == [["acme/b"]]
+
+
+def test_discovery_errors_are_kept(store: Store) -> None:
+    from repoboard.config import Owner
+
+    runner = FakeGhRunner({"api user": {"login": "me"}, "orgs/gone/repos": GhError("boom", 500), **empty_repo_routes()})
+    poller = Poller(Config(owners=(Owner("gone"),)), store, Gh(runner), Clock())
+    poller.poll()
+    assert poller.discovery_errors() == {"gone": "boom"}
+    assert poller.repos() == ()
+
+
+def test_partial_poll_accepts_discovered_repositories(store: Store) -> None:
+    from repoboard.config import Owner
+
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/a")]], **empty_repo_routes()}
+    )
+    poller = Poller(Config(owners=(Owner("acme"),)), store, Gh(runner), Clock())
+    poller.poll()
+    runner.calls.clear()
+    poller.poll(["acme/a", "not/watched"])
+    assert polled_repos(runner) == {"acme/a"}
+
+
+def test_changed_owners_drop_the_cached_listing(store: Store) -> None:
+    from repoboard.config import Owner
+
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/a"), owner_repo("acme/b")]],
+         **empty_repo_routes()}
+    )  # fmt: skip
+    poller = Poller(Config(owners=(Owner("acme"),)), store, Gh(runner), Clock())
+    poller.poll()
+    assert poller.repos() == ("acme/a", "acme/b")
+    poller.config = Config(owners=(Owner("acme", exclude=("b",)),))
+    assert poller.repos() == ("acme/a", "acme/b")  # until the next poll lists acme with the new filter
+    poller.poll()
+    assert poller.repos() == ("acme/a",)
+
+
+def test_a_failed_listing_keeps_the_repositories_of_that_owner(store: Store) -> None:
+    from repoboard.config import Owner
+
+    clock = Clock()
+    answer: list[Any] = [[[owner_repo("acme/a"), owner_repo("acme/b")]]]
+
+    def listing(call: list[str]) -> Any:
+        if isinstance(answer[0], GhError):
+            raise answer[0]
+        return answer[0]
+
+    runner = FakeGhRunner({"api user": {"login": "me"}, "orgs/acme/repos": listing, **empty_repo_routes()})
+    poller = Poller(Config(owners=(Owner("acme"),)), store, Gh(runner), clock)
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    answer[0] = GhError("timeout", 504)
+    clock.now = NOW + timedelta(hours=2)
+    poller.poll()
+    assert poller.repos() == ("acme/a", "acme/b")
+    assert poller.discovery_errors() == {"acme": "timeout"}
+    answer[0] = [[owner_repo("acme/a"), owner_repo("acme/b")]]
+    clock.now = NOW + timedelta(hours=4)
+    poller.poll()
+    assert added == []
+
+
+def test_single_repositories_in_another_case_are_not_polled_twice(store: Store) -> None:
+    from repoboard.config import Owner
+
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/tool")]], **empty_repo_routes()}
+    )
+    poller = Poller(Config(repos=("Acme/Tool",), owners=(Owner("acme"),)), store, Gh(runner), Clock())
+    poller.poll()
+    assert poller.repos() == ("Acme/Tool",)
+
+
+def test_a_single_repository_handed_over_to_its_owner_stays(store: Store) -> None:
+    from repoboard.config import Owner
+
+    clock = Clock()
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/tool")]], **empty_repo_routes()}
+    )
+    poller = Poller(Config(repos=("acme/tool",), owners=(Owner("acme"),)), store, Gh(runner), clock)
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    poller.config = Config(owners=(Owner("acme"),))
+    assert poller.repos() == ("acme/tool",)
+    clock.now = NOW + timedelta(hours=2)
+    poller.poll()
+    assert poller.repos() == ("acme/tool",)
+    assert added == []
+
+
+def flaky_listing(answer: list[Any]) -> Any:
+    def listing(call: list[str]) -> Any:
+        if isinstance(answer[0], GhError):
+            raise answer[0]
+        return answer[0]
+
+    return listing
+
+
+def test_an_owner_whose_first_listing_failed_announces_nothing_later(store: Store) -> None:
+    from repoboard.config import Owner
+
+    clock = Clock()
+    acme: list[Any] = [[[owner_repo("acme/a")]]]
+    beta: list[Any] = [GhError("timeout", 504)]
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": flaky_listing(acme), "orgs/beta/repos": flaky_listing(beta),
+         **empty_repo_routes()}
+    )  # fmt: skip
+    poller = Poller(Config(owners=(Owner("acme"), Owner("beta"))), store, Gh(runner), clock)
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    assert poller.discovery_errors() == {"beta": "timeout"}
+    beta[0] = [[owner_repo("beta/x"), owner_repo("beta/y")]]
+    clock.now = NOW + timedelta(hours=2)
+    poller.poll()
+    assert poller.repos() == ("acme/a", "beta/x", "beta/y")
+    assert added == []
+
+
+def test_editing_one_owner_keeps_the_listing_of_the_others(store: Store) -> None:
+    from repoboard.config import Owner
+
+    clock = Clock()
+    beta: list[Any] = [[[owner_repo("beta/x")]]]
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/a"), owner_repo("acme/b")]],
+         "orgs/beta/repos": flaky_listing(beta), **empty_repo_routes()}
+    )  # fmt: skip
+    poller = Poller(Config(owners=(Owner("acme"), Owner("beta"))), store, Gh(runner), clock)
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    beta[0] = GhError("timeout", 504)
+    poller.config = Config(owners=(Owner("acme", exclude=("b",)), Owner("beta")))
+    assert poller.repos() == ("acme/a", "acme/b", "beta/x")  # the old listing stays until acme is listed again
+    poller.poll()
+    assert poller.repos() == ("acme/a", "beta/x")
+    beta[0] = [[owner_repo("beta/x"), owner_repo("beta/new")]]
+    clock.now = NOW + timedelta(hours=2)
+    poller.poll()
+    assert added == [["beta/new"]]
+
+
+def test_an_edited_owner_that_fails_keeps_what_it_had(store: Store) -> None:
+    from repoboard.config import Owner
+
+    acme: list[Any] = [[[owner_repo("acme/a"), owner_repo("acme/b")]]]
+    runner = FakeGhRunner({"api user": {"login": "me"}, "orgs/acme/repos": flaky_listing(acme), **empty_repo_routes()})
+    poller = Poller(Config(owners=(Owner("acme"),)), store, Gh(runner), Clock())
+    poller.poll()
+    acme[0] = GhError("timeout", 504)
+    poller.config = Config(owners=(Owner("acme", exclude=("b",)),))
+    poller.poll()
+    assert poller.repos() == ("acme/a", "acme/b")
+
+
+def test_repositories_a_wider_filter_lets_in_are_not_news(store: Store) -> None:
+    from repoboard.config import Owner
+
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/a"), owner_repo("acme/b")]],
+         **empty_repo_routes()}
+    )  # fmt: skip
+    poller = Poller(Config(owners=(Owner("acme", exclude=("b",)),)), store, Gh(runner), Clock())
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    poller.config = Config(owners=(Owner("acme"),))
+    poller.poll()
+    assert poller.repos() == ("acme/a", "acme/b")
+    assert added == []

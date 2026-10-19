@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import dataclasses
+import json
 import logging
 import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from repoboard.collector import Collector
-from repoboard.config import Config
+from repoboard.config import Config, Owner
+from repoboard.discovery import list_owner, matches
 from repoboard.gh import Gh, GhError
 from repoboard.store import Entry, Store
 
@@ -21,6 +25,9 @@ Listener = Callable[[list[Entry]], None]
 # A repository the user opened an item of is "touched": it is polled again when the user comes back
 # to Repoboard, and once more a little later, so a merge on GitHub shows up without a full poll.
 TOUCH_TTL = timedelta(minutes=30)
+# How long the repository list of the owners stays valid. New repositories show up after this at most.
+DISCOVERY_TTL = timedelta(hours=1)
+RepoListener = Callable[[list[str]], None]
 FOLLOW_UP_SECONDS = 30.0
 
 
@@ -37,6 +44,7 @@ class Poller:
         self.gh = gh
         self.clock = clock
         self.listeners: list[Listener] = []
+        self.repo_listeners: list[RepoListener] = []  # told about repositories that appeared under an owner
         self.polling = False
         self.last_error: str | None = None
         self._me: str | None = None
@@ -49,6 +57,73 @@ class Poller:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    def repos(self) -> tuple[str, ...]:
+        """The repositories to poll: the single ones of the config, plus what each owner last listed."""
+        single = {repo.lower() for repo in self.config.repos}
+        listed = {repo for entry in self._listings().values() for repo in entry["repos"]}
+        return tuple(sorted([*self.config.repos, *(r for r in listed if r.lower() not in single)], key=str.lower))
+
+    def _listings(self) -> dict[str, dict[str, Any]]:
+        """The last listing of each owner of the config, by lower case name.
+
+        An entry: "rule" (the owner's filters as they were listed), "at", "repos" and "error". An entry
+        stays when its filters change, until the owner is listed again, so nothing flickers or is lost.
+        """
+        saved: dict[str, dict[str, Any]] = json.loads(self.store.get_setting("owner_listings") or "{}")
+        names = {owner.name.lower() for owner in self.config.owners}
+        return {name: entry for name, entry in saved.items() if name in names}
+
+    def discovery_errors(self) -> dict[str, str]:
+        listings = self._listings()
+        return {
+            owner.name: str(entry["error"])
+            for owner in self.config.owners
+            if (entry := listings.get(owner.name.lower())) and entry.get("error")
+        }
+
+    def _discover(self, now: datetime) -> None:
+        listings = self._listings()
+        single = {repo.lower() for repo in self.config.repos}
+        added: list[str] = []
+        for owner in self.config.owners:
+            entry = listings.get(owner.name.lower())
+            if self._listing_is_fresh(owner, entry, now):
+                continue
+            listing, news = self._list_owner(owner, entry, now, single)
+            listings[owner.name.lower()] = listing
+            added += news
+        self.store.set_setting("owner_listings", json.dumps(listings))
+        for listener in self.repo_listeners if added else ():
+            listener(sorted(added, key=str.lower))
+
+    @staticmethod
+    def _rule(owner: Owner) -> str:
+        return json.dumps(dataclasses.astuple(owner))
+
+    def _listing_is_fresh(self, owner: Owner, entry: dict[str, Any] | None, now: datetime) -> bool:
+        if not entry or entry["rule"] != self._rule(owner):
+            return False
+        return now - datetime.fromisoformat(entry["at"]) < DISCOVERY_TTL
+
+    def _list_owner(
+        self, owner: Owner, entry: dict[str, Any] | None, now: datetime, single: set[str]
+    ) -> tuple[dict[str, Any], list[str]]:
+        """A new listing of one owner, and the repositories it adds as news."""
+        assert self._me is not None
+        rule = self._rule(owner)
+        try:
+            listed = [info.name for info in list_owner(self.gh, owner.name, self._me) if matches(owner, info)]
+        except GhError as exc:
+            # The owner keeps what it had: dropping it would delete its data and announce it all later.
+            kept = {"rule": entry["rule"], "repos": entry["repos"]} if entry else {"rule": "", "repos": []}
+            return {**kept, "at": now.isoformat(), "error": str(exc)}, []
+        news: list[str] = []
+        # News only under the same filters, after a good listing: not a first listing, not a wider filter.
+        if entry and entry["rule"] == rule:
+            known = {repo.lower() for repo in entry["repos"]} | single
+            news = [repo for repo in listed if repo.lower() not in known]
+        return {"rule": rule, "at": now.isoformat(), "repos": listed, "error": None}, news
 
     def last_poll(self) -> datetime | None:
         value = self.store.get_setting("last_poll")
@@ -84,12 +159,15 @@ class Poller:
         if self._me is None:
             self._me = self.gh.viewer_login()
         since = now - timedelta(days=self.config.lookback_days)
-        targets = list(self.config.repos) if repos is None else [r for r in repos if r in self.config.repos]
+        if repos is None:
+            self._discover(now)
+        watched = self.repos()
+        targets = list(watched) if repos is None else [r for r in repos if r in watched]
         collector = Collector(self.gh, self._me, self.config.hidden_alert_tools)
         snapshots = collector.collect_all(targets, since)
         self.store.save_snapshots(snapshots, now)
         if repos is None:
-            self.store.forget_repos_except(self.config.repos)
+            self.store.forget_repos_except(watched)
             self.store.set_setting("last_poll", now.isoformat())
         # The UI reloads its content whenever this changes: after a full or a partial poll.
         self.store.set_setting("data_version", f"{now.isoformat()}#{time.monotonic_ns()}")

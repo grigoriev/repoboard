@@ -102,3 +102,48 @@ def test_with_repos_keeps_every_other_field(tmp_path: Path) -> None:
     for name in Config.__dataclass_fields__:
         if name != "repos":
             assert getattr(updated, name) == getattr(original, name), name
+
+
+def test_owners(tmp_path: Path) -> None:
+    path = tmp_path / "c.toml"
+    path.write_text(
+        '[[owners]]\nname = "grigoriev"\n\n'
+        '[[owners]]\nname = "intechcore"\nexclude = ["articles"]\n\n'
+        '[[owners]]\nname = "SchweizerischeBundesbahnen"\ninclude = ["ch.sbb.polarion.*"]\n'
+        'exclude_types = ["archived", "fork", "private"]\n'
+    )
+    owners = config.load(path).owners
+    assert owners[0] == config.Owner("grigoriev")
+    assert owners[0].exclude_types == ("archived", "fork")
+    assert owners[1].exclude == ("articles",)
+    assert owners[2].include == ("ch.sbb.polarion.*",)
+    assert owners[2].exclude_types == ("archived", "fork", "private")
+
+
+@pytest.mark.parametrize(
+    "owners",
+    [
+        "x",
+        [{"exclude": []}],
+        [{"name": "bad name"}],
+        [{"name": "o", "include": "x"}],
+        [{"name": "o", "exclude_types": ["sideways"]}],
+        [{"name": "o"}, {"name": "O"}],
+    ],
+)
+def test_invalid_owners(owners: object) -> None:
+    with pytest.raises(ConfigError):
+        config.parse({"owners": owners})
+
+
+def test_owners_round_trip(tmp_path: Path) -> None:
+    original = Config(
+        repos=("cli/cli",),
+        owners=(
+            config.Owner("grigoriev"),
+            config.Owner("intechcore", include=("a*",), exclude=('we"ird',), exclude_types=("private",)),
+        ),
+    )
+    path = tmp_path / "c.toml"
+    config.save(original, path)
+    assert config.load(path) == original

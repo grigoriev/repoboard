@@ -67,8 +67,15 @@ with an Apple Developer ID, so macOS asks once whether Repoboard may send notifi
 
 ## Configure
 
-Copy [config.example.toml](config.example.toml) to `~/.config/repoboard/config.toml` and list your
-repositories. To import the visible repositories of the Alfred GitHub workflow:
+Copy [config.example.toml](config.example.toml) to `~/.config/repoboard/config.toml`. Watch whole
+owners, single repositories, or both:
+
+- `[[owners]]` takes every repository of a user or organization. New repositories join on their
+  own, and Repoboard announces them. `include` and `exclude` narrow the list by name patterns,
+  `exclude_types` by type: archived, fork, mirror, template, private, public.
+- `repos` lists single repositories.
+
+To import the visible repositories of the Alfred GitHub workflow:
 
 ```sh
 repoboard import-alfred

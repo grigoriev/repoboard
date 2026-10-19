@@ -46,3 +46,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   allow native notifications.
 - Row actions are icon buttons: seen, snooze one day and snooze one week. The full text is a hint.
 - `repoboard tray` runs in the Windows and Linux tray, with the unseen count as a badge on the icon.
+- `[[owners]]` in the config watches every repository of a user or organization, narrowed by
+  name patterns and repository types. New repositories join within an hour and are announced.

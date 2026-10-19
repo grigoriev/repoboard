@@ -94,6 +94,8 @@
   "notify.security": "Sicherheits-Alert in {repo}",
   "notify.failed": "Pull Request in {repo} fehlgeschlagen",
   "notify.renovate": "Renovate wartet in {repo}",
+  "notify.new_repo": "Neues Repository in {owner}",
+  "notify.new_repos": "{count} neue Repositories",
   "notify.summary_title": "Repoboard: {count} neu",
   "notify.summary_body": "Öffne Repoboard, um sie zu sehen."
 }

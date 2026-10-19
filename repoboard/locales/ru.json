@@ -94,6 +94,8 @@
   "notify.security": "Alert безопасности в {repo}",
   "notify.failed": "PR упал в {repo}",
   "notify.renovate": "Renovate ждёт в {repo}",
+  "notify.new_repo": "Новый репозиторий в {owner}",
+  "notify.new_repos": "Новых репозиториев: {count}",
   "notify.summary_title": "Repoboard: новых {count}",
   "notify.summary_body": "Открой Repoboard, чтобы посмотреть."
 }
