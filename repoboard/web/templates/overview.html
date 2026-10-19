@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% from "macros.html" import org_chips %}
+{% block main %}
+<div class="toolbar">
+  <span class="since">{{ t("toolbar.repos", count=repo_count) }}</span>
+  <button class="btn primary" type="button" hx-post="/refresh" hx-swap="none">{{ t("toolbar.refresh") }}</button>
+</div>
+{{ org_chips(t, owners, org, "/overview") }}
+{% if not rows %}
+<div class="panel"><p class="empty">{{ t("empty.no_repos", path=config_path) }}</p></div>
+{% else %}
+<div class="panel rows">
+  <table>
+    <thead><tr>
+      <th>{{ t("overview.repo") }}</th>
+      <th class="n">{{ t("overview.unseen") }}</th>
+      <th class="n">{{ t("overview.issues") }}</th>
+      <th class="n">{{ t("overview.discussions") }}</th>
+      <th class="n">{{ t("overview.prs") }}</th>
+      <th class="n">{{ t("overview.renovate") }}</th>
+      <th class="n">{{ t("overview.failed") }}</th>
+      <th class="n">{{ t("overview.alerts") }}</th>
+      <th class="n">{{ t("overview.activity") }}</th>
+    </tr></thead>
+    <tbody>
+    {% for row in rows %}
+      <tr>
+        <td class="repo {{ 'unread' if row.unseen }}" title="{{ row.repo }}"><a href="/repo/{{ row.repo }}">{{ short_repo(row.repo) }}</a>
+          {% if row.error %}<span class="pill bad" title="{{ row.error }}">!</span>{% endif %}</td>
+        <td class="n {{ 'hot' if row.unseen }}">{{ row.unseen or "·" }}</td>
+        <td class="n">{{ row.open_issues or "·" }}</td>
+        <td class="n">{{ row.open_discussions or "·" }}</td>
+        <td class="n">{{ row.open_prs or "·" }}</td>
+        <td class="n {{ 'warn' if row.renovate }}">{{ row.renovate or "·" }}</td>
+        <td class="n {{ 'bad' if row.failed }}">{{ row.failed or "·" }}</td>
+        <td class="n {{ 'bad' if row.alerts }}">
+          {%- if row.security_readable or row.alerts %}{{ row.alerts or "·" }}
+          {%- elif row.polled_at %}<span title="{{ t('security.no_access') }}">–</span>{% endif -%}
+        </td>
+        <td class="n">{{ age(row.last_activity) if row.last_activity else "" }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

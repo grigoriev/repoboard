@@ -1,0 +1,7 @@
+<span id="status" class="status" hx-get="/status?seen={{ last_poll.isoformat() | urlencode if last_poll else 'never' }}"
+      hx-trigger="{{ 'every 2s' if polling else 'every 60s' }}, repoboard-status from:body" hx-swap="outerHTML">
+  {% if poll_error %}<span class="error">{{ poll_error }}</span> · {% endif %}
+  {% if polling %}{{ t("toolbar.refreshing") }}
+  {% elif last_poll %}{{ t("toolbar.last_poll", time=age(last_poll)) }}
+  {% else %}{{ t("toolbar.never_polled") }}{% endif %}
+</span>

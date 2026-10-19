@@ -1,0 +1,22 @@
+# Repoboard config. Default location: ~/.config/repoboard/config.toml.
+# Override the location with the REPOBOARD_CONFIG environment variable.
+
+# UI and notification language: en, ru or de.
+language = "en"
+
+# Minutes between two polls.
+poll_interval_minutes = 10
+
+# Closed issues updated within this many days are checked for new replies.
+lookback_days = 14
+
+# Port of the local web UI on 127.0.0.1.
+port = 8765
+
+# SQLite database with the snapshots and the seen marks.
+database = "~/.local/state/repoboard/repoboard.sqlite3"
+
+# Repositories to watch, as "owner/name".
+repos = [
+    "grigoriev/repoboard",
+]
