@@ -28,6 +28,7 @@ uv run mypy repoboard tests                    # type check
 uv run pytest --cov --cov-report=term-missing  # tests with coverage
 uv run repoboard serve                         # run the web UI with the background poller
 scripts/visual-tests.sh [--update]             # screenshot tests in the Playwright image
+scripts/build-app.sh                           # build dist/Repoboard.app with PyInstaller (macOS)
 ```
 
 Point `REPOBOARD_CONFIG` at a scratch config to try changes without touching your own.
@@ -44,7 +45,9 @@ Package `repoboard/`, console entry point `repoboard` (`repoboard.cli:main`):
 - `store.py`: SQLite snapshots, seen, snooze and notified marks, inbox and overview queries
 - `poller.py`: one poll at a time, a background thread, listeners for new entries
 - `i18n.py` and `locales/*.json`: translations. All catalogs carry the same keys
-- `notify.py`: notification texts and backends. `tray.py`: menu bar. `window.py`: pywebview window
+- `notify.py`: notification texts and backends (native, terminal-notifier, osascript)
+- `tray.py`: menu bar. `window.py`: pywebview window, driven through its stdin
+- `macos.py`: process name and icon, activation policy, open at login. `packaging/`: the app entry point
 - `web/app.py`: routes; `web/templates`: Jinja2; `web/static`: CSS and htmx
 
 Tests mirror the modules in `tests/test_<module>.py`. `tests/visual` holds the Playwright screenshot

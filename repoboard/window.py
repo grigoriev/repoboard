@@ -37,9 +37,7 @@ class Window:
             return
         self._stop()
         try:
-            self._process = subprocess.Popen(
-                [sys.executable, "-m", "repoboard.window", self.url], stdin=subprocess.PIPE
-            )
+            self._process = subprocess.Popen(window_command(self.url), stdin=subprocess.PIPE)
         except OSError:
             webbrowser.open(self.url)
 
@@ -79,6 +77,13 @@ def close_window(saver: GeometrySaver, destroy: Callable[[], object]) -> Callabl
         destroy()
 
     return close
+
+
+def window_command(url: str) -> list[str]:
+    """How to start the window process: the app bundle runs its own executable, a checkout runs Python."""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "window", url]
+    return [sys.executable, "-m", "repoboard.window", url]
 
 
 def follow_commands(stream: BinaryIO, focus: Callable[[], object], close: Callable[[], object]) -> None:

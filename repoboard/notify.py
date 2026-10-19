@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import sys
+import threading
 import webbrowser
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -60,6 +62,9 @@ class DesktopNotifier:
         if get_backend_class().__name__ == "DummyNotificationCenter":
             raise RuntimeError("no notification backend outside an app bundle")
         self._notifier = DesktopNotifierSync(app_name="Repoboard")
+        # macOS refuses an app without a Developer ID signature. Without permission every send is lost.
+        if not self._notifier.request_authorisation():
+            raise RuntimeError("notifications are not allowed for Repoboard")
         self._open_url = open_url
 
     def send(self, notification: Notification) -> None:
@@ -68,6 +73,31 @@ class DesktopNotifier:
             message=notification.body,
             on_clicked=lambda: self._open_url(notification.url),
         )
+
+
+def plist_safe(value: str) -> str:
+    """terminal-notifier parses option values as property lists: escape a leading bracket or quote."""
+    return "\\" + value if value and value[0] in "[({<\"'" else value
+
+
+class TerminalNotifier:
+    """terminal-notifier from Homebrew: works without a signed app, and a click opens the item."""
+
+    def __init__(self, executable: str) -> None:
+        self.executable = executable
+
+    def send(self, notification: Notification) -> None:
+        subprocess.run(
+            [
+                self.executable,
+                "-title", plist_safe(notification.title),
+                "-message", plist_safe(notification.body),
+                "-open", notification.url,
+                "-group", notification.url,
+            ],
+            check=False,
+            capture_output=True,
+        )  # fmt: skip
 
 
 class OsascriptNotifier:
@@ -87,12 +117,43 @@ class LogNotifier:
         log.info("%s: %s %s", notification.title, notification.body, notification.url)
 
 
-def default_notifier() -> Notifier:  # pragma: no cover - depends on the desktop
-    try:
-        return DesktopNotifier()
-    except Exception as exc:  # any backend failure falls back
-        log.info("native notifications unavailable (%s), falling back", exc)
-    return OsascriptNotifier() if sys.platform == "darwin" else LogNotifier()
+def fallback_notifier() -> Notifier:
+    """The best way that needs no permission: terminal-notifier, then osascript on macOS."""
+    if sys.platform == "darwin":
+        terminal = shutil.which("terminal-notifier")
+        return TerminalNotifier(terminal) if terminal else OsascriptNotifier()
+    return LogNotifier()
+
+
+class DeferredNotifier:
+    """Builds the native notifier in the background and uses the fallback until it is ready.
+
+    Asking macOS for permission waits until the user answers the prompt. The app must not wait with it.
+    """
+
+    def __init__(self, build: Callable[[], Notifier], fallback: Notifier) -> None:
+        self._fallback = fallback
+        self._native: Notifier | None = None
+        self._ready = threading.Event()
+        threading.Thread(target=self._build, args=(build,), name="repoboard-notifier", daemon=True).start()
+
+    def _build(self, build: Callable[[], Notifier]) -> None:
+        try:
+            self._native = build()
+        except Exception as exc:  # any backend failure keeps the fallback
+            log.info("native notifications unavailable (%s), falling back", exc)
+        finally:
+            self._ready.set()
+
+    def wait_ready(self, timeout: float) -> bool:
+        return self._ready.wait(timeout)
+
+    def send(self, notification: Notification) -> None:
+        (self._native or self._fallback).send(notification)
+
+
+def default_notifier(native: Callable[[], Notifier] = DesktopNotifier) -> Notifier:  # pragma: no cover
+    return DeferredNotifier(native, fallback_notifier())
 
 
 class NotificationListener:

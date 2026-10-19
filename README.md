@@ -49,6 +49,18 @@ Or install a release: download the wheel from the
 Every release carries a signed provenance bundle. Verify a downloaded file with
 `gh attestation verify <file> --repo grigoriev/repoboard`.
 
+### macOS app
+
+Build `Repoboard.app` and move it to `/Applications`:
+
+```sh
+scripts/build-app.sh
+mv dist/Repoboard.app /Applications/
+```
+
+The app lives in the menu bar. Its menu has **Open at login**. The build is signed ad hoc, not
+with an Apple Developer ID, so macOS asks once whether Repoboard may send notifications.
+
 ## Configure
 
 Copy [config.example.toml](config.example.toml) to `~/.config/repoboard/config.toml` and list your
@@ -80,8 +92,12 @@ default. List the tools to hide in `hidden_alert_tools`, or set it to `[]` to se
 
 ## Notifications on macOS
 
-Clickable native notifications need an app bundle. Started from the terminal, Repoboard notifies
-through `osascript`, and a click on the notification does not open the item.
+Repoboard picks the first way that works:
+
+1. Native notifications of `Repoboard.app`, once you allow them. A click opens the item.
+2. [terminal-notifier](https://github.com/julienXX/terminal-notifier)
+   (`brew install terminal-notifier`). A click opens the item.
+3. `osascript`. A click does not open the item.
 
 ## Contributing
 

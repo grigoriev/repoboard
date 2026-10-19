@@ -38,7 +38,7 @@ def tray_state(poller: Poller, t: Translator) -> TrayState:
         title=str(total) if total else "",
         sections=tuple((t(f"section.{section}"), len(inbox[section])) for section in Section),
         status=status,
-        labels={key: t(f"tray.{key}") for key in ("open", "refresh", "quit", "unseen")},
+        labels={key: t(f"tray.{key}") for key in ("open", "refresh", "quit", "unseen", "open_at_login")},
     )
 
 
@@ -51,7 +51,7 @@ def run_tray(
 ) -> None:  # pragma: no cover - needs the macOS menu bar
     import rumps
 
-    from repoboard.macos import brand_process
+    from repoboard.macos import brand_process, in_app_bundle, opens_at_login, set_open_at_login
 
     brand_process(menu_bar_only=True)
 
@@ -78,7 +78,15 @@ def run_tray(
             self.menu.add(rumps.MenuItem(state.labels["refresh"], callback=lambda _: poller.refresh(), key="r"))
             self.menu.add(rumps.MenuItem(state.status))
             self.menu.add(rumps.separator)
+            if in_app_bundle():
+                login = rumps.MenuItem(state.labels["open_at_login"], callback=self.toggle_login)
+                login.state = int(opens_at_login())
+                self.menu.add(login)
             self.menu.add(rumps.MenuItem(state.labels["quit"], callback=self.quit, key="q"))
+
+        def toggle_login(self, item: rumps.MenuItem) -> None:
+            set_open_at_login(not item.state)
+            item.state = int(opens_at_login())
 
         def quit(self, _: object) -> None:
             on_quit()

@@ -25,6 +25,9 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--no-browser", action="store_true", help="do not open the browser")
     commands.add_parser("poll", help="poll once and print the inbox counts")
     commands.add_parser("import-alfred", help="add the repositories of the Alfred GitHub workflow to the config")
+    # The menu bar starts the window through this command when Repoboard runs as an app bundle.
+    window = commands.add_parser("window", help=argparse.SUPPRESS)
+    window.add_argument("url")
     return parser
 
 
@@ -36,6 +39,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except config.ConfigError as exc:
         print(f"repoboard: {exc}", file=sys.stderr)
         return 2
+    if args.command == "window":  # pragma: no cover - opens a native window
+        from repoboard.window import main as window_main
+
+        window_main([args.url])
+        return 0
     if args.command == "import-alfred":
         return import_alfred(cfg)
     if args.command == "poll":

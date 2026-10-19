@@ -100,6 +100,9 @@ def test_desktop_notifier(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, app_name: str) -> None:
             sent["app"] = app_name
 
+        def request_authorisation(self) -> bool:
+            return True
+
         def send(self, **kwargs: Any) -> str:
             sent.update(kwargs)
             return "id"
@@ -151,3 +154,106 @@ def test_log_notifier(caplog: pytest.LogCaptureFixture) -> None:
 )
 def test_german_titles_follow_the_gender(kind: Kind, title: str) -> None:
     assert build([entry(Section.NEW, kind)], Translator("de"), "u")[0].title == title
+
+
+def test_desktop_notifier_refuses_without_permission(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Denied:
+        def __init__(self, app_name: str) -> None:
+            pass
+
+        def request_authorisation(self) -> bool:
+            return False
+
+    install_fake_desktop_notifier(monkeypatch, Denied, backend="MacOSNotificationCenter")
+    with pytest.raises(RuntimeError, match="not allowed"):
+        DesktopNotifier()
+
+
+def test_terminal_notifier_opens_the_item(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+    notify.TerminalNotifier("/opt/homebrew/bin/terminal-notifier").send(Notification("T", "B", "https://x"))
+    assert calls == [
+        [
+            "/opt/homebrew/bin/terminal-notifier",
+            "-title",
+            "T",
+            "-message",
+            "B",
+            "-open",
+            "https://x",
+            "-group",
+            "https://x",
+        ]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("terminal", "platform", "expected"),
+    [
+        ("/bin/terminal-notifier", "darwin", notify.TerminalNotifier),
+        (None, "darwin", OsascriptNotifier),
+        (None, "linux", LogNotifier),
+    ],
+)
+def test_fallback_notifier_order(
+    monkeypatch: pytest.MonkeyPatch, terminal: str | None, platform: str, expected: type
+) -> None:
+    monkeypatch.setattr("shutil.which", lambda name: terminal)
+    monkeypatch.setattr("sys.platform", platform)
+    assert isinstance(notify.fallback_notifier(), expected)
+
+
+def test_deferred_notifier_keeps_the_fallback_when_native_fails(caplog: pytest.LogCaptureFixture) -> None:
+    caplog.set_level("INFO", logger=notify.__name__)
+    fallback = Recorder()
+
+    def broken() -> Recorder:
+        raise RuntimeError("not allowed")
+
+    deferred = notify.DeferredNotifier(broken, fallback)
+    assert deferred.wait_ready(5)
+    deferred.send(Notification("t", "b", "u"))
+    assert len(fallback.sent) == 1
+    assert "not allowed" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("text", "safe"),
+    [
+        ("[Bug] crash", "\\[Bug] crash"),
+        ("(draft) x", "\\(draft) x"),
+        ('"quoted"', '\\"quoted"'),
+        ("plain", "plain"),
+        ("", ""),
+    ],
+)
+def test_plist_safe(text: str, safe: str) -> None:
+    assert notify.plist_safe(text) == safe
+
+
+def test_terminal_notifier_escapes_a_leading_bracket(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+    notify.TerminalNotifier("tn").send(Notification("[Bug] in repo", "{x}", "u"))
+    assert calls[0][1:5] == ["-title", "\\[Bug] in repo", "-message", "\\{x}"]
+
+
+def test_deferred_notifier_does_not_block_and_takes_over_when_ready() -> None:
+    import threading
+
+    ready = threading.Event()
+    native = Recorder()
+    fallback = Recorder()
+
+    def build() -> Recorder:
+        ready.wait(5)
+        return native
+
+    deferred = notify.DeferredNotifier(build, fallback)
+    deferred.send(Notification("early", "b", "u"))
+    ready.set()
+    assert deferred.wait_ready(5)
+    deferred.send(Notification("late", "b", "u"))
+    assert [n.title for n in fallback.sent] == ["early"]
+    assert [n.title for n in native.sent] == ["late"]

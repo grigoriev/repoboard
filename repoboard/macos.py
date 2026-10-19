@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import contextlib
+import logging
+import os
 import sys
 from importlib import resources
+
+log = logging.getLogger(__name__)
 
 
 def icon_path() -> str:
@@ -20,13 +24,19 @@ def brand_process(menu_bar_only: bool) -> None:  # pragma: no cover - needs AppK
         from Foundation import NSBundle
     except ImportError:
         return
-    info = NSBundle.mainBundle().infoDictionary()
-    with contextlib.suppress(TypeError, AttributeError):
-        info["CFBundleName"] = "Repoboard"  # the dictionary is mutable in practice, but not by contract
+    from AppKit import NSApplicationActivationPolicyRegular
+
     app = NSApplication.sharedApplication()
-    app.setApplicationIconImage_(NSImage.alloc().initWithContentsOfFile_(icon_path()))
-    if menu_bar_only:
-        app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+    if not getattr(sys, "frozen", False):
+        # Outside the app bundle the process is Python: give it the name and icon of Repoboard.
+        info = NSBundle.mainBundle().infoDictionary()
+        with contextlib.suppress(TypeError, AttributeError):
+            info["CFBundleName"] = "Repoboard"  # the dictionary is mutable in practice, but not by contract
+        app.setApplicationIconImage_(NSImage.alloc().initWithContentsOfFile_(icon_path()))
+    # The bundle is a menu bar agent (LSUIElement). Its window process must show in Cmd-Tab and the Dock.
+    app.setActivationPolicy_(
+        NSApplicationActivationPolicyAccessory if menu_bar_only else NSApplicationActivationPolicyRegular
+    )
 
 
 def title_bar_height() -> float:  # pragma: no cover - needs AppKit
@@ -62,3 +72,35 @@ def is_fullscreen(window: object) -> bool:  # pragma: no cover - needs AppKit
         return False
     native = getattr(window, "native", None)
     return bool(native is not None and native.styleMask() & NSWindowStyleMaskFullScreen)
+
+
+def in_app_bundle() -> bool:
+    """Whether Repoboard runs as Repoboard.app. Only an app bundle can open at login."""
+    return sys.platform == "darwin" and bool(getattr(sys, "frozen", False))
+
+
+def opens_at_login() -> bool:  # pragma: no cover - needs ServiceManagement
+    from ServiceManagement import SMAppService, SMAppServiceStatusEnabled
+
+    return bool(SMAppService.mainAppService().status() == SMAppServiceStatusEnabled)
+
+
+def set_open_at_login(enabled: bool) -> None:  # pragma: no cover - needs ServiceManagement
+    from ServiceManagement import SMAppService
+
+    service = SMAppService.mainAppService()
+    ok, error = service.registerAndReturnError_(None) if enabled else service.unregisterAndReturnError_(None)
+    if not ok:
+        # Registration can fail, or wait for approval in System Settings > General > Login Items.
+        log.warning("open at login: %s (status %s)", error, service.status())
+
+
+# Where Homebrew puts gh and terminal-notifier. An app started by launchd gets a PATH without them.
+TOOL_DIRS = ("/opt/homebrew/bin", "/usr/local/bin")
+
+
+def app_path(current: str) -> str:
+    """PATH with the tool directories in front, for an app started from Finder, the Dock or at login."""
+    parts = [part for part in current.split(os.pathsep) if part]
+    missing = [directory for directory in TOOL_DIRS if os.path.isdir(directory) and directory not in parts]
+    return os.pathsep.join([*missing, *parts])

@@ -24,6 +24,7 @@ dependencies = [
     "fastapi>=0.146.0",
     "jinja2>=3.1.6",
     "markupsafe>=3.0.4",
+    "pyobjc-framework-servicemanagement>=12.2.2 ; sys_platform == 'darwin'",
     "pywebview>=6.2.1",
     "rumps>=0.4.0 ; sys_platform == 'darwin'",
     "uvicorn>=0.54.0",
@@ -39,6 +40,10 @@ dev = [
 ]
 
 [dependency-groups]
+# Builds Repoboard.app: scripts/build-app.sh.
+app = [
+    "pyinstaller==6.22.3",
+]
 # Only the visual tests use these. A group, not an extra, so --all-extras in CI leaves them out.
 visual = [
     "playwright==1.64.0",
@@ -98,5 +103,5 @@ warn_unused_configs = true
 show_error_codes = true
 
 [[tool.mypy.overrides]]
-module = ["rumps", "webview", "desktop_notifier", "AppKit", "Foundation"]
+module = ["rumps", "webview", "desktop_notifier", "AppKit", "Foundation", "ServiceManagement"]
 ignore_missing_imports = true

@@ -39,6 +39,7 @@ def test_state_before_first_poll(poller: Poller) -> None:
     assert state.title == ""
     assert state.status == "Not polled yet"
     assert state.labels["quit"] == "Quit"
+    assert state.labels["open_at_login"] == "Open at login"
     assert ("New replies", 0) in state.sections
 
 
@@ -245,3 +246,32 @@ def test_closing_from_the_menu_saves_the_size_first() -> None:
     saver.resized(900, 600)
     window.close_window(saver, lambda: order.append("destroy"))()
     assert order == ["save {'width': 900, 'height': 600}", "destroy"]
+
+
+def test_window_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert window.window_command("u") == [sys.executable, "-m", "repoboard.window", "u"]
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert window.window_command("u") == [sys.executable, "window", "u"]
+
+
+def test_in_app_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
+    from repoboard import macos
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert not macos.in_app_bundle()
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    assert macos.in_app_bundle()
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert not macos.in_app_bundle()
+
+
+def test_app_path_adds_homebrew(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from repoboard import macos
+
+    brew = tmp_path / "brew"
+    brew.mkdir()
+    missing = tmp_path / "missing"
+    monkeypatch.setattr(macos, "TOOL_DIRS", (str(brew), str(missing)))
+    assert macos.app_path("/usr/bin:/bin") == f"{brew}:/usr/bin:/bin"
+    assert macos.app_path(f"/usr/bin:{brew}") == f"/usr/bin:{brew}"
+    assert macos.app_path("") == str(brew)
