@@ -282,3 +282,9 @@ def test_a_watched_item_in_a_polled_repository_notices_its_change(store: Store) 
     store.save_snapshots([RepoSnapshot("o/r", (failed,))], NOW + HOUR)  # the repository poll runs first
     store.save_watched([failed], NOW + HOUR)
     assert [e.item.number for e in store.inbox(NOW + HOUR)[Section.WATCHED]] == ["9"]
+
+
+def test_save_watched_keeps_the_rows_of_links_that_failed(store: Store) -> None:
+    store.save_watched([item("1", repo="a/a"), item("2", repo="a/a")], NOW)
+    store.save_watched([item("1", repo="a/a")], NOW, keep={"a/a#issue#2"})
+    assert sorted(i.number for i in store.items()) == ["1", "2"]

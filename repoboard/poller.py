@@ -139,7 +139,8 @@ class Poller:
             if not refs:
                 return 0
         items, errors = collector.watched_items(refs)
-        self.store.save_watched(items, now, None if repos is None else {ref.repo for ref in refs})
+        failed = {f"{ref.repo}#{ref.kind}#{ref.number}" for ref in refs if ref.url in errors}
+        self.store.save_watched(items, now, None if repos is None else {ref.repo for ref in refs}, keep=failed)
         if repos is None:
             self.store.set_setting("watched_errors", json.dumps(errors))
         return len(items)

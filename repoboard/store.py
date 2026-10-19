@@ -163,16 +163,22 @@ class Store:
                     (snapshot.repo, now.isoformat(), snapshot.error, open_discussions, security),
                 )
 
-    def save_watched(self, items: Iterable[Item], now: datetime, repos: set[str] | None = None) -> None:
-        """Replace the watched items with the latest poll of them: all, or those of `repos`."""
+    def save_watched(
+        self, items: Iterable[Item], now: datetime, repos: set[str] | None = None, keep: set[str] | None = None
+    ) -> None:
+        """Replace the watched items with the latest poll of them: all, or those of `repos`.
+
+        The rows of `keep`, keys of links that could not be read this time, stay as they are, as a
+        repository keeps its rows when its snapshot fails.
+        """
         with self._tx() as db:
             previous = {
-                row["key"]: row for row in db.execute("SELECT key, tags, open, updated_at FROM items WHERE watched = 1")
+                row["key"]: row
+                for row in db.execute("SELECT key, repo, tags, open, updated_at FROM items WHERE watched = 1")
             }
-            if repos is None:
-                db.execute("DELETE FROM items WHERE watched = 1")
-            else:
-                db.executemany("DELETE FROM items WHERE watched = 1 AND repo = ?", [(repo,) for repo in repos])
+            stale = [key for key, row in previous.items() if key not in (keep or set())]
+            stale = [key for key in stale if repos is None or previous[key]["repo"] in repos]
+            db.executemany("DELETE FROM items WHERE watched = 1 AND key = ?", [(key,) for key in stale])
             rows = []
             for item in items:
                 updated = item.updated_at

@@ -501,3 +501,14 @@ def test_unwatching_an_item_of_a_polled_repository_keeps_it(store: Store) -> Non
     poller.config = Config(repos=("o/r",))
     poller.poll()
     assert [(i.number, i.watched) for i in store.items()] == [("7", False)]
+
+
+def test_a_watched_link_that_fails_once_keeps_its_state(store: Store) -> None:
+    routes = {"api user": {"login": "me"}, **watched_routes(), **empty_repo_routes()}
+    runner = FakeGhRunner(routes)
+    poller = Poller(Config(items=("https://github.com/cli/cli/issues/7",)), store, Gh(runner), Clock())
+    poller.poll()
+    runner.routes["repos/cli/cli/issues/7"] = GhError("Bad Gateway", 502)
+    poller.poll()
+    assert [i.number for i in store.items()] == ["7"]
+    assert poller.watched_errors() == {"https://github.com/cli/cli/issues/7": "Bad Gateway"}
