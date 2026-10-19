@@ -54,13 +54,18 @@ class Poller:
             self.last_error = str(exc)
             log.warning("poll failed: %s", exc)
             return []
+        except Exception as exc:  # an unexpected failure must not end the background loop
+            self.last_error = str(exc) or type(exc).__name__
+            log.exception("poll failed")
+            return []
         finally:
             self.polling = False
             self._lock.release()
 
     def _poll(self) -> list[Entry]:
         now = self.clock()
-        first_run = self.store.baseline() is None
+        # Silent until one poll got as far as notifying. A failed first attempt must not lift it.
+        first_run = self.store.get_setting("notified_once") is None
         self.store.ensure_baseline(now)
         if self._me is None:
             self._me = self.gh.viewer_login()
@@ -71,6 +76,7 @@ class Poller:
         self.store.set_setting("last_poll", now.isoformat())
         self.last_error = None
         fresh = self.store.take_notifications(now, silent=first_run)
+        self.store.set_setting("notified_once", now.isoformat())
         for listener in self.listeners:
             listener(fresh)
         return fresh

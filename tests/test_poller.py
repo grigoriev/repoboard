@@ -109,3 +109,26 @@ def test_background_thread_polls_and_refreshes(store: Store) -> None:
     assert poller._thread is not None
     poller._thread.join(5)
     assert not poller._thread.is_alive()
+
+
+def test_first_successful_poll_is_silent_after_a_failed_one(store: Store) -> None:
+    clock = Clock()
+    routes = {**empty_repo_routes(), "api user": GhError("offline"), "issue list": issues("2026-10-19T08:00:00Z")}
+    poller, runner = make_poller(store, routes, clock)
+    assert poller.poll() == []
+    runner.routes["api user"] = {"login": "me"}
+    assert poller.poll() == []
+    assert len(store.inbox(NOW)[Section.NEW]) == 1
+
+
+def test_unexpected_error_keeps_the_poller_alive(store: Store, caplog: pytest.LogCaptureFixture) -> None:
+    poller, _ = make_poller(store, empty_repo_routes(), Clock())
+
+    def broken(entries: list[Entry]) -> None:
+        raise ValueError("listener broke")
+
+    poller.listeners.append(broken)
+    assert poller.poll() == []
+    assert poller.last_error == "listener broke"
+    assert poller.polling is False
+    assert "poll failed" in caplog.text
