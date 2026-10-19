@@ -175,3 +175,17 @@ def test_forget_repos_except(store: Store) -> None:
     assert {i.repo for i in store.items()} == {"o/a"}
     store.forget_repos_except([])
     assert store.items() == []
+
+
+def test_reply_before_the_click_but_after_the_poll_is_not_lost(store: Store) -> None:
+    store.save_snapshots([RepoSnapshot("o/r", (item("1"),))], NOW)
+    reply_at = NOW + HOUR
+    store.mark_seen(["o/r#issue#1"], NOW + 2 * HOUR)
+    store.save_snapshots([RepoSnapshot("o/r", (item("1", activity_at=reply_at, activity_by="bob"),))], NOW + 3 * HOUR)
+    assert [e.item.number for e in store.inbox(NOW + 3 * HOUR)[Section.REPLIES]] == ["1"]
+
+
+def test_mark_seen_of_an_unknown_key_uses_the_click_time(store: Store) -> None:
+    store.mark_seen(["o/r#issue#404"], NOW)
+    store.save_snapshots([RepoSnapshot("o/r", (item("404"),))], NOW)
+    assert store.inbox(NOW)[Section.NEW] == []

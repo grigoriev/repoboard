@@ -251,11 +251,15 @@ class Store:
         return grouped
 
     def mark_seen(self, keys: Iterable[str], now: datetime) -> None:
+        """Record the marker the user saw, not the click time: activity between the last poll and the
+        click has an older timestamp than the click, but the user has not seen it."""
+        wanted = set(keys)
+        markers = {e.item.key: e.marker for e in self.entries(now) if e.item.key in wanted}
         with self._tx() as db:
             db.executemany(
                 "INSERT INTO marks(key, seen_at) VALUES (?, ?) "
                 "ON CONFLICT(key) DO UPDATE SET seen_at = excluded.seen_at",
-                [(key, now.isoformat()) for key in keys],
+                [(key, markers.get(key, now).isoformat()) for key in wanted],
             )
 
     def mark_unseen(self, key: str) -> None:
