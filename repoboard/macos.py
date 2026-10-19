@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import sys
 from importlib import resources
 
@@ -20,8 +21,8 @@ def brand_process(menu_bar_only: bool) -> None:  # pragma: no cover - needs AppK
     except ImportError:
         return
     info = NSBundle.mainBundle().infoDictionary()
-    if info is not None:
-        info["CFBundleName"] = "Repoboard"
+    with contextlib.suppress(TypeError, AttributeError):
+        info["CFBundleName"] = "Repoboard"  # the dictionary is mutable in practice, but not by contract
     app = NSApplication.sharedApplication()
     app.setApplicationIconImage_(NSImage.alloc().initWithContentsOfFile_(icon_path()))
     if menu_bar_only:
