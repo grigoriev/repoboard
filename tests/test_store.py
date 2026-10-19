@@ -261,3 +261,24 @@ def test_overview_counts_watched_pull_requests_by_their_state(store: Store) -> N
     )
     (row,) = store.overview(["o/r"], NOW)
     assert (row.open_prs, row.failed) == (1, 1)
+
+
+def test_a_resurfaced_watched_item_stays_until_seen(store: Store) -> None:
+    pr = item("9", Kind.PR, repo="cli/cli")
+    store.save_watched([pr], NOW)
+    store.mark_seen([pr.key], NOW)
+    failed = replace(pr, tags=(Tag.CHECKS_FAILURE,))
+    store.save_watched([failed], NOW + HOUR)
+    store.save_watched([failed], NOW + 2 * HOUR)  # GitHub still reports the old updated_at
+    assert [e.item.number for e in store.inbox(NOW + 2 * HOUR)[Section.WATCHED]] == ["9"]
+
+
+def test_a_watched_item_in_a_polled_repository_notices_its_change(store: Store) -> None:
+    pr = item("9", Kind.PR)
+    store.save_snapshots([RepoSnapshot("o/r", (pr,))], NOW)
+    store.save_watched([pr], NOW)
+    store.mark_seen([pr.key], NOW)
+    failed = replace(pr, tags=(Tag.CHECKS_FAILURE,))
+    store.save_snapshots([RepoSnapshot("o/r", (failed,))], NOW + HOUR)  # the repository poll runs first
+    store.save_watched([failed], NOW + HOUR)
+    assert [e.item.number for e in store.inbox(NOW + HOUR)[Section.WATCHED]] == ["9"]

@@ -144,11 +144,11 @@ class Store:
         with self._tx() as db:
             for snapshot in snapshots:
                 if snapshot.error is None:
-                    # Watched items have their own poll and stay. A repository item with the same key
-                    # replaces it below, and the watched poll that follows marks it watched again.
+                    # A watched item belongs to the watched poll: the repository poll leaves its row alone,
+                    # so the watched poll can still compare the state it last saw.
                     db.execute("DELETE FROM items WHERE repo = ? AND watched = 0", (snapshot.repo,))
                     db.executemany(
-                        "INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT OR IGNORE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         [self._item_row(item) for item in snapshot.items],
                     )
                     open_discussions, security = snapshot.open_discussions, json.dumps(snapshot.security)
@@ -166,7 +166,9 @@ class Store:
     def save_watched(self, items: Iterable[Item], now: datetime, repos: set[str] | None = None) -> None:
         """Replace the watched items with the latest poll of them: all, or those of `repos`."""
         with self._tx() as db:
-            previous = {row["key"]: row for row in db.execute("SELECT key, tags, open FROM items WHERE watched = 1")}
+            previous = {
+                row["key"]: row for row in db.execute("SELECT key, tags, open, updated_at FROM items WHERE watched = 1")
+            }
             if repos is None:
                 db.execute("DELETE FROM items WHERE watched = 1")
             else:
@@ -175,10 +177,13 @@ class Store:
             for item in items:
                 updated = item.updated_at
                 before = previous.get(item.key)
-                # GitHub does not touch updated_at for a failed check or a new conflict. Count the change
-                # here, so the item comes back to the Watched section.
-                if before and (before["tags"], bool(before["open"])) != (",".join(item.tags), item.open):
-                    updated = max(updated, now)
+                if before:
+                    # GitHub does not touch updated_at for a failed check or a new conflict. Count such a
+                    # change here, and never move the time back, so the item stays until it is seen.
+                    stored = _dt(before["updated_at"])
+                    updated = max(updated, stored) if stored else updated
+                    if (before["tags"], bool(before["open"])) != (",".join(item.tags), item.open):
+                        updated = max(updated, now)
                 rows.append(self._item_row(item, watched=True, updated_at=updated))
             db.executemany("INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
 
@@ -340,28 +345,26 @@ class Store:
         for entry in self.entries(now):
             if entry.unseen and entry.snoozed_until is None:
                 unseen[entry.item.repo] = unseen.get(entry.item.repo, 0) + 1
-        rows: list[RepoRow] = []
-        for repo in repos:
-            state = polled.get(repo)
-            items = items_by_repo.get(repo, [])
-            # A watched item counts by its state, as it would without the watch.
-            sections = [classify(item, ignore_watch=True) for item in items]
-            rows.append(
-                RepoRow(
-                    repo=repo,
-                    polled_at=_dt(state["polled_at"]) if state else None,
-                    error=state["error"] if state else None,
-                    open_issues=sum(1 for i in items if i.kind is Kind.ISSUE and i.open),
-                    open_discussions=state["open_discussions"] if state else 0,
-                    open_prs=sum(1 for i in items if i.kind is Kind.PR and i.open),
-                    renovate=sections.count(Section.RENOVATE),
-                    failed=sections.count(Section.FAILED),
-                    alerts=sections.count(Section.SECURITY),
-                    unseen=unseen.get(repo, 0),
-                    last_activity=max((i.updated_at for i in items if i.kind is not Kind.ALERT), default=None),
-                    security={
-                        AlertSource(k): Access(v) for k, v in json.loads(state["security"] if state else "{}").items()
-                    },
-                )
-            )
-        return rows
+        return [
+            self._repo_row(repo, polled.get(repo), items_by_repo.get(repo, []), unseen.get(repo, 0)) for repo in repos
+        ]
+
+    @staticmethod
+    def _repo_row(repo: str, state: sqlite3.Row | None, items: list[Item], unseen: int) -> RepoRow:
+        # A watched item counts by its state, as it would without the watch.
+        sections = [classify(item, ignore_watch=True) for item in items]
+        security = json.loads(state["security"]) if state else {}
+        return RepoRow(
+            repo=repo,
+            polled_at=_dt(state["polled_at"]) if state else None,
+            error=state["error"] if state else None,
+            open_issues=sum(1 for i in items if i.kind is Kind.ISSUE and i.open),
+            open_discussions=state["open_discussions"] if state else 0,
+            open_prs=sum(1 for i in items if i.kind is Kind.PR and i.open),
+            renovate=sections.count(Section.RENOVATE),
+            failed=sections.count(Section.FAILED),
+            alerts=sections.count(Section.SECURITY),
+            unseen=unseen,
+            last_activity=max((i.updated_at for i in items if i.kind is not Kind.ALERT), default=None),
+            security={AlertSource(k): Access(v) for k, v in security.items()},
+        )

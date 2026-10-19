@@ -475,3 +475,29 @@ def test_a_config_with_only_watched_items_notifies(store: Store) -> None:
     poller.listeners.append(lambda entries: None)
     poller.poll()
     assert store.get_setting("notified_once") is not None
+
+
+def test_unwatching_an_item_of_a_polled_repository_keeps_it(store: Store) -> None:
+    issue = {
+        "number": 7, "title": "Bug", "url": "https://github.com/o/r/issues/7", "author": {"login": "bob"},
+        "state": "OPEN", "createdAt": "2026-10-19T08:00:00Z", "updatedAt": "2026-10-19T08:30:00Z",
+    }  # fmt: skip
+    rest = {
+        "number": 7, "title": "Bug", "html_url": "https://github.com/o/r/issues/7", "user": {"login": "bob"},
+        "state": "open", "created_at": "2026-10-19T08:00:00Z", "updated_at": "2026-10-19T08:30:00Z",
+    }  # fmt: skip
+    routes = {
+        "api user": {"login": "me"},
+        "repos/o/r/issues/7/comments": [[]],
+        "repos/o/r/issues/7": rest,
+        **empty_repo_routes(),
+        "issue list": [issue],
+    }
+    poller = Poller(
+        Config(repos=("o/r",), items=("https://github.com/o/r/issues/7",)), store, Gh(FakeGhRunner(routes)), Clock()
+    )
+    poller.poll()
+    assert [(i.number, i.watched) for i in store.items()] == [("7", True)]
+    poller.config = Config(repos=("o/r",))
+    poller.poll()
+    assert [(i.number, i.watched) for i in store.items()] == [("7", False)]

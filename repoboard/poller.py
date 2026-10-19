@@ -184,11 +184,12 @@ class Poller:
         targets = list(watched) if repos is None else [r for r in repos if r in watched]
         collector = Collector(self.gh, self._me, self.config.hidden_alert_tools)
         snapshots = collector.collect_all(targets, since)
+        # Watched items first: an item no longer watched then gets its plain row from the repository poll.
+        watched_read = self._poll_watched(collector, now, None if repos is None else set(repos))
         self.store.save_snapshots(snapshots, now)
         if repos is None:
             self.store.forget_repos_except(watched)
             self.store.set_setting("last_poll", now.isoformat())
-        watched_read = self._poll_watched(collector, now, None if repos is None else set(repos))
         # The UI reloads its content whenever this changes: after a full or a partial poll.
         self.store.set_setting("data_version", f"{now.isoformat()}#{time.monotonic_ns()}")
         self.last_error = None
