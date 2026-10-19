@@ -61,22 +61,34 @@ def test_icons_exist() -> None:
 
 
 class FakeProcess:
-    def __init__(self, alive: bool = True) -> None:
-        self.alive = alive
+    def __init__(self, exits_on_close: bool = True) -> None:
+        self.alive = True
         self.terminated = False
+        self.exits_on_close = exits_on_close
+        self.stdin = io.BytesIO()
 
     def poll(self) -> int | None:
         return None if self.alive else 0
 
+    def wait(self, timeout: float | None = None) -> int:
+        sent = b"" if self.stdin.closed else self.stdin.getvalue()
+        if self.alive and b"close" in sent and self.exits_on_close:
+            self.alive = False
+        if self.alive:
+            raise subprocess.TimeoutExpired("window", timeout or 0)
+        return 0
+
     def terminate(self) -> None:
         self.terminated = True
+        self.alive = False
 
 
-def test_window_reopens_and_closes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_window_focuses_a_running_window_and_closes_it_gently(monkeypatch: pytest.MonkeyPatch) -> None:
     started: list[list[str]] = []
     processes: list[FakeProcess] = []
 
     def popen(cmd: list[str], **kwargs: Any) -> FakeProcess:
+        assert kwargs["stdin"] is subprocess.PIPE
         started.append(cmd)
         processes.append(FakeProcess())
         return processes[-1]
@@ -85,12 +97,53 @@ def test_window_reopens_and_closes(monkeypatch: pytest.MonkeyPatch) -> None:
     w = Window("http://127.0.0.1:1/")
     w.open()
     w.open()
-    assert started[0] == [sys.executable, "-m", "repoboard.window", "http://127.0.0.1:1/"]
+    assert started == [[sys.executable, "-m", "repoboard.window", "http://127.0.0.1:1/"]]
+    assert processes[0].stdin.getvalue() == b"focus\n"
+    w.close()
+    assert processes[0].stdin.getvalue() == b"focus\nclose\n"
+    assert not processes[0].terminated
+    w.close()
+    w.open()
+    assert len(started) == 2
+
+
+def test_window_is_terminated_when_it_ignores_close(monkeypatch: pytest.MonkeyPatch) -> None:
+    process = FakeProcess(exits_on_close=False)
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kwargs: process)
+    w = Window("http://x/")
+    w.open()
+    w.close()
+    assert process.terminated
+
+
+def test_window_reopens_when_the_pipe_is_gone(monkeypatch: pytest.MonkeyPatch) -> None:
+    processes: list[FakeProcess] = []
+
+    def popen(cmd: list[str], **kwargs: Any) -> FakeProcess:
+        processes.append(FakeProcess())
+        return processes[-1]
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+    w = Window("http://x/")
+    w.open()
+    processes[0].stdin.close()
+    w.open()
     assert processes[0].terminated
-    w.close()
-    assert processes[1].terminated
-    processes[1].alive = False
-    w.close()
+    assert len(processes) == 2
+
+
+@pytest.mark.parametrize(
+    ("commands", "calls"),
+    [
+        (b"focus\nfocus\nclose\nfocus\n", ["focus", "focus", "close"]),
+        (b"focus\n", ["focus", "close"]),
+        (b"bogus\n", ["close"]),
+    ],
+)
+def test_follow_commands(commands: bytes, calls: list[str]) -> None:
+    seen: list[str] = []
+    window.follow_commands(io.BytesIO(commands), focus=lambda: seen.append("focus"), close=lambda: seen.append("close"))
+    assert seen == calls
 
 
 def test_window_falls_back_to_browser(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -184,3 +237,11 @@ def test_window_defaults_have_one_source() -> None:
     from repoboard.web import app
 
     assert app.WINDOW_DEFAULT == {"width": window.WIDTH, "height": window.HEIGHT}
+
+
+def test_closing_from_the_menu_saves_the_size_first() -> None:
+    order: list[str] = []
+    saver = window.GeometrySaver(lambda values: order.append(f"save {values}"), delay=10)
+    saver.resized(900, 600)
+    window.close_window(saver, lambda: order.append("destroy"))()
+    assert order == ["save {'width': 900, 'height': 600}", "destroy"]

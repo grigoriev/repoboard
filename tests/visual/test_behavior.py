@@ -46,3 +46,25 @@ def test_opening_an_item_removes_it_from_new(app: Callable[..., str], page_for: 
     with page.context.expect_page():
         page.get_by_role("link", name="#10412").click()
     expect(rows).to_have_count(before - 1)
+
+
+def test_focus_moves_to_the_next_row_after_seen(app: Callable[..., str], page_for: Callable[..., Page]) -> None:
+    page = page_for()
+    page.goto(app())
+    buttons = page.locator('details[data-section="new"] [data-action="seen"]')
+    second = buttons.nth(1).get_attribute("data-key")
+    buttons.first.focus()
+    page.keyboard.press("Enter")
+    expect(buttons).to_have_count(2)
+    expect(page.locator(":focus")).to_have_attribute("data-key", second or "")
+    expect(page.locator(":focus")).to_have_attribute("data-action", "seen")
+
+
+def test_focus_stays_on_a_link_after_a_live_update(app: Callable[..., str], page_for: Callable[..., Page]) -> None:
+    page = page_for()
+    page.goto(app())
+    link = page.get_by_role("link", name="#12", exact=True)
+    link.focus()
+    page.evaluate("htmx.trigger(document.body, 'repoboard-updated')")
+    page.wait_for_timeout(500)
+    expect(page.locator(":focus")).to_have_text("#12")

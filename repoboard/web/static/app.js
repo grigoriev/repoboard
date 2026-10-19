@@ -87,3 +87,29 @@
   document.addEventListener("DOMContentLoaded", function () { apply(document); });
   document.body.addEventListener("htmx:afterSwap", function (event) { apply(event.detail.target.ownerDocument); });
 })();
+
+// Keyboard focus survives a live update. The focused control comes back by its item and action. When
+// its row is gone, as after "Seen", the same control of the row that took its place gets the focus.
+(function () {
+  var saved = null;
+
+  function controls(action) {
+    return Array.prototype.slice.call(document.querySelectorAll('#content [data-action="' + action + '"]'));
+  }
+
+  document.body.addEventListener("htmx:beforeSwap", function (event) {
+    var active = document.activeElement;
+    saved = null;
+    if (event.detail.target.id !== "content" || !active?.dataset?.action) return;
+    saved = { key: active.dataset.key, action: active.dataset.action, index: controls(active.dataset.action).indexOf(active) };
+  });
+
+  document.body.addEventListener("htmx:afterSettle", function () {
+    if (!saved) return;
+    var same = controls(saved.action);
+    var match = same.find(function (element) { return element.dataset.key === saved.key; });
+    var target = match || same[Math.min(saved.index, same.length - 1)];
+    saved = null;
+    if (target) target.focus();
+  });
+})();

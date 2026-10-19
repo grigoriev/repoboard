@@ -7,7 +7,7 @@ import logging
 import socket
 import sys
 import webbrowser
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from repoboard import __version__, config
 from repoboard.gh import Gh
@@ -105,6 +105,19 @@ def serve(cfg: config.Config, open_browser: bool) -> int:  # pragma: no cover - 
     return 0
 
 
+def quit_sequence(
+    close_window: Callable[[], None], stop_poller: Callable[[], None], stop_server: Callable[[], None]
+) -> Callable[[], None]:
+    """Quit in this order: the window saves its size through the server, so the server stops last."""
+
+    def quit_app() -> None:
+        close_window()
+        stop_poller()
+        stop_server()
+
+    return quit_app
+
+
 def tray(cfg: config.Config) -> int:  # pragma: no cover - needs the macOS menu bar
     import threading
 
@@ -132,11 +145,9 @@ def tray(cfg: config.Config) -> int:  # pragma: no cover - needs the macOS menu 
     poller.start()
     window = Window(url)
 
-    def quit_app() -> None:
-        poller.stop()
+    def stop_server() -> None:
         server.should_exit = True
-        window.close()
 
-    run_tray(poller, translator, window.open, quit_app)
+    run_tray(poller, translator, window.open, quit_sequence(window.close, poller.stop, stop_server))
     store.close()
     return 0
