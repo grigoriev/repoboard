@@ -288,3 +288,41 @@ def test_changed_owners_drop_the_cached_listing(store: Store) -> None:
     assert poller.repos() == ()  # the old listing no longer applies
     poller.poll()
     assert poller.repos() == ("acme/a",)
+
+
+def test_a_failed_listing_keeps_the_repositories_of_that_owner(store: Store) -> None:
+    from repoboard.config import Owner
+
+    clock = Clock()
+    answer: list[Any] = [[[owner_repo("acme/a"), owner_repo("acme/b")]]]
+
+    def listing(call: list[str]) -> Any:
+        if isinstance(answer[0], GhError):
+            raise answer[0]
+        return answer[0]
+
+    runner = FakeGhRunner({"api user": {"login": "me"}, "orgs/acme/repos": listing, **empty_repo_routes()})
+    poller = Poller(Config(owners=(Owner("acme"),)), store, Gh(runner), clock)
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    answer[0] = GhError("timeout", 504)
+    clock.now = NOW + timedelta(hours=2)
+    poller.poll()
+    assert poller.repos() == ("acme/a", "acme/b")
+    assert poller.discovery_errors() == {"acme": "timeout"}
+    answer[0] = [[owner_repo("acme/a"), owner_repo("acme/b")]]
+    clock.now = NOW + timedelta(hours=4)
+    poller.poll()
+    assert added == []
+
+
+def test_single_repositories_in_another_case_are_not_polled_twice(store: Store) -> None:
+    from repoboard.config import Owner
+
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/tool")]], **empty_repo_routes()}
+    )
+    poller = Poller(Config(repos=("Acme/Tool",), owners=(Owner("acme"),)), store, Gh(runner), Clock())
+    poller.poll()
+    assert poller.repos() == ("Acme/Tool",)

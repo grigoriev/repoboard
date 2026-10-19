@@ -59,9 +59,9 @@ def test_list_owner_falls_back_to_the_user_listing() -> None:
 
 
 def test_list_owner_reports_other_errors() -> None:
-    runner = FakeGhRunner({"orgs/acme/repos": GhError("boom", 500)})
+    gh = Gh(FakeGhRunner({"orgs/acme/repos": GhError("boom", 500)}))
     with pytest.raises(GhError):
-        list_owner(Gh(runner), "acme", viewer="me")
+        list_owner(gh, "acme", viewer="me")
 
 
 def test_resolve_merges_owners_and_single_repos() -> None:
@@ -75,3 +75,9 @@ def test_resolve_merges_owners_and_single_repos() -> None:
     result = resolve(Gh(runner), cfg, viewer="me")
     assert result.repos == ("acme/a", "acme/b", "cli/cli")
     assert result.errors == {"broken": "boom"}
+
+
+def test_resolve_ignores_case_and_keeps_the_config_spelling() -> None:
+    runner = FakeGhRunner({"orgs/acme/repos": [[repo("acme/tool")]]})
+    cfg = Config(repos=("Acme/Tool",), owners=(Owner("acme"),))
+    assert resolve(Gh(runner), cfg, viewer="me").repos == ("Acme/Tool",)

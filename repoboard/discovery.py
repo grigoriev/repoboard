@@ -62,11 +62,15 @@ def list_owner(gh: Gh, owner: str, viewer: str) -> list[RepoInfo]:
 
 def resolve(gh: Gh, config: Config, viewer: str) -> Resolved:
     """The repositories to poll: the matching repositories of every owner, plus the single ones."""
-    repos = set(config.repos)
+    # GitHub names ignore case. Keyed by the lower case name, the spelling of the config wins.
+    repos = {repo.lower(): repo for repo in config.repos}
     errors: dict[str, str] = {}
     for owner in config.owners:
         try:
-            repos.update(info.name for info in list_owner(gh, owner.name, viewer) if matches(owner, info))
+            listed = [info.name for info in list_owner(gh, owner.name, viewer) if matches(owner, info)]
         except GhError as exc:
             errors[owner.name] = str(exc)
-    return Resolved(tuple(sorted(repos, key=str.lower)), errors)
+            continue
+        for name in listed:
+            repos.setdefault(name.lower(), name)
+    return Resolved(tuple(sorted(repos.values(), key=str.lower)), errors)

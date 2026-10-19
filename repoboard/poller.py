@@ -60,7 +60,9 @@ class Poller:
 
     def repos(self) -> tuple[str, ...]:
         """The repositories to poll: the single ones of the config, plus what the owners last listed."""
-        return tuple(sorted({*self.config.repos, *self._saved_listing().get("repos", [])}, key=str.lower))
+        single = {repo.lower() for repo in self.config.repos}
+        listed = [repo for repo in self._saved_listing().get("repos", []) if repo.lower() not in single]
+        return tuple(sorted([*self.config.repos, *listed], key=str.lower))
 
     def _owners_key(self) -> str:
         return json.dumps([dataclasses.astuple(owner) for owner in self.config.owners])
@@ -81,7 +83,13 @@ class Poller:
             return
         assert self._me is not None
         resolved = resolve(self.gh, self.config, self._me)
-        owned = sorted(set(resolved.repos) - set(self.config.repos), key=str.lower)
+        single = {repo.lower() for repo in self.config.repos}
+        kept = {repo for repo in resolved.repos if repo.lower() not in single}
+        # An owner that could not be listed keeps what it had. Dropping it would delete its data now
+        # and announce all of it as new once the listing works again.
+        failed = {owner.lower() for owner in resolved.errors}
+        kept.update(repo for repo in saved.get("repos", []) if repo.split("/", 1)[0].lower() in failed)
+        owned = sorted(kept, key=str.lower)
         listing = {"at": now.isoformat(), "owners": self._owners_key(), "repos": owned, "errors": resolved.errors}
         self.store.set_setting("discovered", json.dumps(listing))
         if "at" in saved:  # the first listing is the starting point, not news
