@@ -18,9 +18,9 @@
     <span class="spacer"></span>
     {% include "status.html" %}
     <span class="zoom">
-      <button type="button" class="btn" data-zoom="out" aria-label="{{ t('zoom.out') }}" title="{{ t('zoom.out') }} (⌘−)">A−</button>
-      <button type="button" class="btn" data-zoom="reset" aria-label="{{ t('zoom.reset') }}" title="{{ t('zoom.reset') }} (⌘0)">A</button>
-      <button type="button" class="btn" data-zoom="in" aria-label="{{ t('zoom.in') }}" title="{{ t('zoom.in') }} (⌘+)">A+</button>
+      <button type="button" class="btn" data-zoom="out" title="{{ t('zoom.out') }} (⌘−)">A−<span class="sr-only"> {{ t('zoom.out') }}</span></button>
+      <button type="button" class="btn" data-zoom="reset" title="{{ t('zoom.reset') }} (⌘0)">A<span class="sr-only"> {{ t('zoom.reset') }}</span></button>
+      <button type="button" class="btn" data-zoom="in" title="{{ t('zoom.in') }} (⌘+)">A+<span class="sr-only"> {{ t('zoom.in') }}</span></button>
     </span>
     <form class="lang" method="post" action="/language">
       <select name="language" aria-label="{{ t('nav.language') }}" onchange="this.form.submit()">

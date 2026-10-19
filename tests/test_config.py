@@ -75,3 +75,13 @@ def test_read_alfred_repos(tmp_path: Path) -> None:
 
 def test_with_repos_keeps_order_and_dedupes() -> None:
     assert config.with_repos(Config(repos=("a/b",)), ["c/d", "a/b"]).repos == ("a/b", "c/d")
+
+
+def test_with_repos_keeps_every_other_field(tmp_path: Path) -> None:
+    original = Config(
+        repos=("a/b",), language="de", poll_interval_minutes=3, lookback_days=2, port=9, database=tmp_path
+    )
+    updated = config.with_repos(original, ["c/d"])
+    for name in Config.__dataclass_fields__:
+        if name != "repos":
+            assert getattr(updated, name) == getattr(original, name), name

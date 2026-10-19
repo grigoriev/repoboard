@@ -10,12 +10,11 @@ import threading
 import urllib.request
 import webbrowser
 from collections.abc import Callable, Sequence
-from typing import Any
 from urllib.parse import urljoin
 
 WIDTH, HEIGHT = 1200, 820
 SAVE_DELAY_SECONDS = 0.5
-Geometry = dict[str, int | None]
+Geometry = dict[str, int]
 
 
 class Window:
@@ -39,12 +38,14 @@ class Window:
 
 
 def load_geometry(base_url: str) -> Geometry:
-    """The saved window size and position, or the defaults when the server does not answer."""
+    """The saved window size, or the default when the server does not answer.
+
+    Only the size is kept. A saved position can point at a monitor that is gone."""
     try:
         with urllib.request.urlopen(urljoin(base_url, "/window"), timeout=2) as response:
             return dict(json.load(response))
     except OSError, ValueError:
-        return {"width": WIDTH, "height": HEIGHT, "x": None, "y": None}
+        return {"width": WIDTH, "height": HEIGHT}
 
 
 def save_geometry(base_url: str, geometry: Geometry) -> None:
@@ -56,16 +57,21 @@ def save_geometry(base_url: str, geometry: Geometry) -> None:
     )
     # The size is a convenience; a missed save must not disturb the window.
     with contextlib.suppress(OSError):
-        urllib.request.urlopen(request, timeout=2).close()
+        urllib.request.urlopen(request, timeout=1).close()
 
 
 class GeometrySaver:
-    """Collects resize and move events and saves once they settle, not on every pixel."""
+    """Collects resize events and saves once they settle, not on every pixel."""
 
     def __init__(
-        self, save: Callable[[Geometry], None], delay: float = SAVE_DELAY_SECONDS, title_bar: float = 0
+        self,
+        save: Callable[[Geometry], None],
+        delay: float = SAVE_DELAY_SECONDS,
+        title_bar: float = 0,
+        skip: Callable[[], bool] = lambda: False,
     ) -> None:
         self._save = save
+        self._skip = skip  # true in fullscreen: that size is not one the user chose
         # pywebview reports the frame height on resize but opens a window with that height as content.
         self._title_bar = title_bar
         self._delay = delay
@@ -74,11 +80,10 @@ class GeometrySaver:
         self._lock = threading.Lock()
 
     def resized(self, width: float, height: float) -> None:
+        if self._skip():
+            return
         # AppKit reports points as floats.
         self._update({"width": round(width), "height": round(height - self._title_bar)})
-
-    def moved(self, x: float, y: float) -> None:
-        self._update({"x": round(x), "y": round(y)})
 
     def _update(self, values: Geometry) -> None:
         with self._lock:
@@ -103,17 +108,16 @@ def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens
     except ImportError:
         webbrowser.open(url)
         return
-    from repoboard.macos import brand_process, title_bar_height
+    from repoboard.macos import brand_process, is_fullscreen, title_bar_height
 
     brand_process(menu_bar_only=False)
-    geometry: dict[str, Any] = load_geometry(url)
-    window = webview.create_window(
-        "Repoboard", url, width=geometry["width"], height=geometry["height"], x=geometry["x"], y=geometry["y"]
-    )
+    size = load_geometry(url)
+    window = webview.create_window("Repoboard", url, width=size["width"], height=size["height"])
     assert window is not None
-    saver = GeometrySaver(lambda values: save_geometry(url, values), title_bar=title_bar_height())
+    saver = GeometrySaver(
+        lambda values: save_geometry(url, values), title_bar=title_bar_height(), skip=lambda: is_fullscreen(window)
+    )
     window.events.resized += saver.resized
-    window.events.moved += saver.moved
     window.events.closing += saver.flush
     webview.start()
 

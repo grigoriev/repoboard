@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
 import tomllib
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 
 LANGUAGES = ("en", "ru", "de")
@@ -117,4 +118,4 @@ def read_alfred_repos(directory: Path = ALFRED_VISIBLE_DIR) -> list[str]:
 
 
 def with_repos(config: Config, repos: Iterable[str]) -> Config:
-    return replace(config, repos=tuple(dict.fromkeys([*config.repos, *repos])))
+    return copy.replace(config, repos=tuple(dict.fromkeys([*config.repos, *repos])))

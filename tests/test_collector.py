@@ -181,7 +181,8 @@ def test_discussions() -> None:
     assert item.open is False
     assert item.tags == (Tag.ANSWERED,)
     assert item.activity_by == "dave"
-    assert "owner=o" in runner.calls[-4] and "name=r" in runner.calls[-4]
+    assert "owner=o" in runner.calls[-4]
+    assert "name=r" in runner.calls[-4]
 
 
 def test_alerts_and_access() -> None:

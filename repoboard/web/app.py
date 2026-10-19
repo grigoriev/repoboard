@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from importlib import resources
@@ -16,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from pydantic import BaseModel
 
+from repoboard import window
 from repoboard.config import LANGUAGES, config_path
 from repoboard.i18n import LANGUAGE_NAMES, Translator
 from repoboard.models import Item, Kind
@@ -27,8 +29,10 @@ LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost"})
 KIND_ORDER = (Kind.ALERT, Kind.PR, Kind.ISSUE, Kind.DISCUSSION)
 SNOOZE_DAYS = (1, 7)
 ZOOM_MIN, ZOOM_MAX, ZOOM_STEP = 0.6, 2.0, 0.1
-WINDOW_DEFAULT = {"width": 1200, "height": 820, "x": None, "y": None}
-WINDOW_LIMITS = {"width": (400, 8000), "height": (300, 8000), "x": (-20000, 20000), "y": (-20000, 20000)}
+WINDOW_DEFAULT = {"width": window.WIDTH, "height": window.HEIGHT}
+WINDOW_LIMITS = {"width": (400, 8000), "height": (300, 8000)}
+# Requests that a browser marks as coming from another site, such as an <img> on a foreign page.
+FOREIGN_SITES = frozenset({"cross-site", "same-site"})
 
 # Overview columns: the sort key of a row, and the direction of the first click.
 SORT_COLUMNS: dict[str, tuple[Callable[[RepoRow], Any], str]] = {
@@ -44,11 +48,9 @@ SORT_COLUMNS: dict[str, tuple[Callable[[RepoRow], Any], str]] = {
 }
 
 
-class WindowGeometry(BaseModel):
+class WindowSize(BaseModel):
     width: int | None = None
     height: int | None = None
-    x: int | None = None
-    y: int | None = None
 
 
 def sort_rows(rows: list[RepoRow], column: str, direction: str) -> list[RepoRow]:
@@ -80,34 +82,68 @@ def short_repo(repo: str) -> Markup:
     return Markup('<span class="owner">{}/</span><wbr>{}').format(owner, name)
 
 
-def create_app(poller: Poller) -> FastAPI:
-    store = poller.store
-    config = poller.config
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    app.mount("/static", StaticFiles(directory=str(_web / "static")), name="static")
+def clamp(value: float, low: float, high: float) -> float:
+    return min(max(value, low), high)
 
-    @app.middleware("http")
-    async def local_only(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        # Refuse DNS rebinding (a foreign Host) and cross-site form posts (a foreign Origin).
-        host = (request.headers.get("host") or "").rsplit(":", 1)[0]
-        origin = request.headers.get("origin")
-        if host not in LOCAL_HOSTS or (origin and urlsplit(origin).hostname not in LOCAL_HOSTS):
-            return Response("Forbidden", status_code=403)
-        return await call_next(request)
 
-    def translator() -> Translator:
-        return Translator(store.get_setting("language") or config.language)
+def by_org[T](values: list[T], org: str | None, repo: Callable[[T], str]) -> list[T]:
+    return [value for value in values if repo(value).startswith(f"{org}/")] if org else values
 
-    def zoom() -> float:
+
+def parse_sort(saved: str | None) -> tuple[str, str]:
+    """The saved overview sort as (column, direction), or the name sort when it is missing or broken."""
+    column, _, direction = (saved or "").partition(" ")
+    if column in SORT_COLUMNS and direction in ("asc", "desc"):
+        return column, direction
+    return "repo", "asc"
+
+
+def sort_link(name: str, column: str, direction: str, org: str | None) -> str:
+    """Link of a column header: the same column flips the direction, another one starts with its default."""
+    flipped = {"asc": "desc", "desc": "asc"}[direction] if name == column else SORT_COLUMNS[name][1]
+    query = {"sort": name, "dir": flipped, **({"org": org} if org else {})}
+    return f"/overview?{urlencode(query)}"
+
+
+async def read_form(request: Request) -> dict[str, str]:
+    parsed = parse_qs((await request.body()).decode())
+    return {key: values[0] for key, values in parsed.items()}
+
+
+class Web:
+    """State the routes share: the poller, its store and config, and the page rendering."""
+
+    def __init__(self, poller: Poller) -> None:
+        self.poller = poller
+        self.store = poller.store
+        self.config = poller.config
+
+    def translator(self) -> Translator:
+        return Translator(self.store.get_setting("language") or self.config.language)
+
+    def zoom(self) -> float:
         try:
-            value = float(store.get_setting("zoom") or 1.0)
+            value = float(self.store.get_setting("zoom") or 1.0)
         except ValueError:
             value = 1.0
-        return min(max(value, ZOOM_MIN), ZOOM_MAX)
+        return clamp(value, ZOOM_MIN, ZOOM_MAX) if math.isfinite(value) else 1.0
 
-    def render(request: Request, name: str, **context: Any) -> HTMLResponse:
-        t = translator()
-        now = poller.clock()
+    def window_size(self) -> dict[str, int]:
+        try:
+            saved = json.loads(self.store.get_setting("window") or "{}")
+        except ValueError:
+            saved = {}
+        if not isinstance(saved, dict):
+            saved = {}
+        return {key: value if isinstance(value := saved.get(key), int) else default
+                for key, default in WINDOW_DEFAULT.items()}  # fmt: skip
+
+    def owners(self) -> list[str]:
+        return sorted({repo.split("/", 1)[0] for repo in self.config.repos}, key=str.lower)
+
+    def render(self, request: Request, name: str, **context: Any) -> HTMLResponse:
+        t = self.translator()
+        now = self.poller.clock()
         context.update(
             t=t,
             now=now,
@@ -116,37 +152,52 @@ def create_app(poller: Poller) -> FastAPI:
             short_repo=short_repo,
             languages=[(code, LANGUAGE_NAMES[code]) for code in LANGUAGES],
             language=t.language,
-            last_poll=poller.last_poll(),
-            polling=poller.polling,
-            poll_error=poller.last_error,
-            repo_count=len(config.repos),
+            last_poll=self.poller.last_poll(),
+            polling=self.poller.polling,
+            poll_error=self.poller.last_error,
+            repo_count=len(self.config.repos),
             config_path=str(config_path()),
             snooze_days=SNOOZE_DAYS,
-            zoom=f"{zoom():.1f}",
+            zoom=f"{self.zoom():.1f}",
         )
         return templates.TemplateResponse(request, name, context)
 
-    async def form(request: Request) -> dict[str, str]:
-        parsed = parse_qs((await request.body()).decode())
-        return {key: values[0] for key, values in parsed.items()}
 
-    def owners() -> list[str]:
-        return sorted({repo.split("/", 1)[0] for repo in config.repos}, key=str.lower)
+def create_app(poller: Poller) -> FastAPI:
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    app.mount("/static", StaticFiles(directory=str(_web / "static")), name="static")
+    app.middleware("http")(local_only)
+    web = Web(poller)
+    add_pages(app, web)
+    add_item_actions(app, web)
+    add_settings(app, web)
+    return app
 
+
+async def local_only(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    # Refuse DNS rebinding (a foreign Host) and requests another site makes the browser send.
+    host = (request.headers.get("host") or "").rsplit(":", 1)[0]
+    origin = request.headers.get("origin")
+    foreign = request.headers.get("sec-fetch-site") in FOREIGN_SITES or (
+        origin and urlsplit(origin).hostname not in LOCAL_HOSTS
+    )
+    if host not in LOCAL_HOSTS or foreign:
+        return Response("Forbidden", status_code=403)
+    return await call_next(request)
+
+
+def add_pages(app: FastAPI, web: Web) -> None:
     @app.get("/", response_class=HTMLResponse)
     def inbox(request: Request, org: str | None = None) -> HTMLResponse:
-        now = poller.clock()
-        sections = store.inbox(now)
-        if org:
-            sections = {s: [e for e in es if e.item.repo.startswith(f"{org}/")] for s, es in sections.items()}
-        return render(
+        sections = {s: by_org(es, org, lambda e: e.item.repo) for s, es in web.store.inbox(web.poller.clock()).items()}
+        return web.render(
             request,
             "inbox.html",
             page="inbox",
             sections=[(section, sections[section]) for section in Section],
             total=sum(len(es) for es in sections.values()),
-            baseline=store.baseline(),
-            owners=owners(),
+            baseline=web.store.baseline(),
+            owners=web.owners(),
             org=org,
         )
 
@@ -158,115 +209,99 @@ def create_app(poller: Poller) -> FastAPI:
         sort_dir: Annotated[str | None, Query(alias="dir")] = None,
     ) -> HTMLResponse:
         if sort in SORT_COLUMNS and sort_dir in ("asc", "desc"):
-            store.set_setting("overview_sort", f"{sort} {sort_dir}")
-        column, _, direction = (store.get_setting("overview_sort") or "").partition(" ")
-        if column not in SORT_COLUMNS or direction not in ("asc", "desc"):
-            column, direction = "repo", "asc"
-        rows = store.overview(config.repos, poller.clock())
-        if org:
-            rows = [row for row in rows if row.repo.startswith(f"{org}/")]
-
-        def sort_link(name: str) -> str:
-            first = SORT_COLUMNS[name][1]
-            flipped = {"asc": "desc", "desc": "asc"}[direction] if name == column else first
-            return f"/overview?{urlencode({'sort': name, 'dir': flipped, **({'org': org} if org else {})})}"
-
-        return render(
+            web.store.set_setting("overview_sort", f"{sort} {sort_dir}")
+        column, direction = parse_sort(web.store.get_setting("overview_sort"))
+        rows = by_org(web.store.overview(web.config.repos, web.poller.clock()), org, lambda row: row.repo)
+        return web.render(
             request,
             "overview.html",
             page="overview",
             rows=sort_rows(rows, column, direction),
-            owners=owners(),
+            owners=web.owners(),
             org=org,
             sort_column=column,
             sort_direction=direction,
-            sort_link=sort_link,
+            sort_link=lambda name: sort_link(name, column, direction, org),
         )
 
     @app.get("/repo/{owner}/{name}", response_class=HTMLResponse)
     def repo(request: Request, owner: str, name: str) -> HTMLResponse:
         full = f"{owner}/{name}"
-        now = poller.clock()
-        entries = {e.item.key: e for e in store.entries(now, full)}
-        items = [i for i in store.items(full) if i.open or i.key in entries]
+        now = web.poller.clock()
+        entries = {e.item.key: e for e in web.store.entries(now, full)}
+        items = [i for i in web.store.items(full) if i.open or i.key in entries]
         groups = [(kind, sorted((i for i in items if i.kind is kind), key=lambda i: i.updated_at, reverse=True))
                   for kind in KIND_ORDER]  # fmt: skip
-        row = next((r for r in store.overview([full], now)), None)
-        return render(request, "repo.html", page="overview", repo=full, row=row, groups=groups, entries=entries)
-
-    @app.post("/items/seen")
-    async def seen(request: Request) -> Response:
-        store.mark_seen([(await form(request))["key"]], poller.clock())
-        return Response()
-
-    @app.post("/items/unseen")
-    async def unseen(request: Request) -> Response:
-        store.mark_unseen((await form(request))["key"])
-        return Response()
-
-    @app.post("/items/snooze")
-    async def snooze(request: Request) -> Response:
-        data = await form(request)
-        days = int(data.get("days", "0"))
-        store.snooze(data["key"], poller.clock() + timedelta(days=days) if days > 0 else None)
-        return Response()
-
-    @app.post("/seen-all")
-    def seen_all() -> RedirectResponse:
-        store.mark_all_seen(poller.clock())
-        return RedirectResponse("/", status_code=303)
-
-    @app.post("/refresh")
-    def refresh() -> Response:
-        poller.refresh()
-        poller.polling = True
-        return Response(headers={"HX-Trigger": "repoboard-status"})
+        row = next(iter(web.store.overview([full], now)), None)
+        return web.render(request, "repo.html", page="overview", repo=full, row=row, groups=groups, entries=entries)
 
     @app.get("/status", response_class=HTMLResponse)
     def status(request: Request, seen: str | None = None) -> HTMLResponse:
         # `seen` is the poll the page shows, "never" before the first one. A newer poll reloads the page.
-        response = render(request, "status.html")
-        last = poller.last_poll()
+        response = web.render(request, "status.html")
+        last = web.poller.last_poll()
         if seen is not None and last and last.isoformat() != seen:
             response.headers["HX-Refresh"] = "true"
         return response
 
+
+def add_item_actions(app: FastAPI, web: Web) -> None:
+    @app.post("/items/seen")
+    async def seen(request: Request) -> Response:
+        web.store.mark_seen([(await read_form(request))["key"]], web.poller.clock())
+        return Response()
+
+    @app.post("/items/unseen")
+    async def unseen(request: Request) -> Response:
+        web.store.mark_unseen((await read_form(request))["key"])
+        return Response()
+
+    @app.post("/items/snooze")
+    async def snooze(request: Request) -> Response:
+        data = await read_form(request)
+        days = int(data.get("days", "0"))
+        web.store.snooze(data["key"], web.poller.clock() + timedelta(days=days) if days > 0 else None)
+        return Response()
+
+    @app.post("/seen-all")
+    def seen_all() -> RedirectResponse:
+        web.store.mark_all_seen(web.poller.clock())
+        return RedirectResponse("/", status_code=303)
+
+    @app.post("/refresh")
+    def refresh() -> Response:
+        web.poller.refresh()
+        web.poller.polling = True
+        return Response(headers={"HX-Trigger": "repoboard-status"})
+
+
+def add_settings(app: FastAPI, web: Web) -> None:
     @app.post("/zoom")
     async def set_zoom(request: Request) -> dict[str, float]:
-        step = (await form(request)).get("step")
-        current = zoom()
+        step = (await read_form(request)).get("step")
+        current = web.zoom()
         changed = {"in": current + ZOOM_STEP, "out": current - ZOOM_STEP, "reset": 1.0}.get(step or "", current)
-        value = round(min(max(changed, ZOOM_MIN), ZOOM_MAX), 1)
-        store.set_setting("zoom", f"{value:.1f}")
+        value = round(clamp(changed, ZOOM_MIN, ZOOM_MAX), 1)
+        web.store.set_setting("zoom", f"{value:.1f}")
         return {"zoom": value}
 
-    def window_geometry() -> dict[str, int | None]:
-        try:
-            saved = json.loads(store.get_setting("window") or "{}")
-        except ValueError:
-            saved = {}
-        return {key: saved.get(key, default) for key, default in WINDOW_DEFAULT.items()}
-
     @app.get("/window")
-    def get_window() -> dict[str, int | None]:
-        return window_geometry()
+    def get_window() -> dict[str, int]:
+        return web.window_size()
 
     @app.post("/window")
-    def set_window(geometry: WindowGeometry) -> dict[str, int | None]:
-        merged = window_geometry()
-        for key, value in geometry.model_dump().items():
+    def set_window(size: WindowSize) -> dict[str, int]:
+        merged = web.window_size()
+        for key, value in size.model_dump().items():
             if value is not None:
-                low, high = WINDOW_LIMITS[key]
-                merged[key] = min(max(value, low), high)
-        store.set_setting("window", json.dumps(merged))
+                merged[key] = int(clamp(value, *WINDOW_LIMITS[key]))
+        web.store.set_setting("window", json.dumps(merged))
         return merged
 
     @app.post("/language")
     async def language(request: Request) -> RedirectResponse:
-        data = await form(request)
+        data = await read_form(request)
         if data.get("language") in LANGUAGES:
-            store.set_setting("language", data["language"])
+            web.store.set_setting("language", data["language"])
         back = request.headers.get("referer") or "/"
         return RedirectResponse(urlsplit(back).path or "/", status_code=303)
-
-    return app

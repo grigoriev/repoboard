@@ -123,7 +123,8 @@ def test_seen_all_redirects(client: TestClient, poller: Poller) -> None:
 def test_overview(client: TestClient, poller: Poller) -> None:
     seed(poller)
     page = client.get("/overview").text
-    assert 'href="/repo/o/r"' in page and 'title="o/r"' in page
+    assert 'href="/repo/o/r"' in page
+    assert 'title="o/r"' in page
     assert 'title="gone"' in page
     assert "x/y" not in client.get("/overview?org=o").text
 
@@ -131,7 +132,8 @@ def test_overview(client: TestClient, poller: Poller) -> None:
 def test_repo_page(client: TestClient, poller: Poller) -> None:
     seed(poller)
     page = client.get("/repo/o/r").text
-    assert "Title 3" in page and "Title 17" in page
+    assert "Title 3" in page
+    assert "Title 17" in page
     assert "Secret scanning: no access to security alerts" in page
     assert "Title 9" not in page
     assert "Could not read the repository: gone" in client.get("/repo/x/y").text
@@ -211,7 +213,7 @@ def test_language_label_and_local_baseline(client: TestClient, poller: Poller) -
 def test_text_size_defaults_to_one(client: TestClient) -> None:
     page = client.get("/").text
     assert "--zoom: 1.0" in page
-    assert 'aria-label="Larger text"' in page
+    assert '>A+<span class="sr-only"> Larger text</span>' in page
 
 
 @pytest.mark.parametrize(
@@ -295,15 +297,40 @@ def test_overview_header_links_toggle_direction(poller: Poller) -> None:
     assert 'aria-sort="descending"' in page
 
 
-def test_window_geometry(client: TestClient, poller: Poller) -> None:
-    assert client.get("/window").json() == {"width": 1200, "height": 820, "x": None, "y": None}
-    assert client.post("/window", json={"width": 1600, "height": 1000, "x": 40, "y": 60}).status_code == 200
-    assert client.get("/window").json() == {"width": 1600, "height": 1000, "x": 40, "y": 60}
-    client.post("/window", json={"width": 50, "height": 99999})
-    assert client.get("/window").json() == {"width": 400, "height": 8000, "x": 40, "y": 60}
+def test_window_size(client: TestClient, poller: Poller) -> None:
+    assert client.get("/window").json() == {"width": 1200, "height": 820}
+    assert client.post("/window", json={"width": 1600, "height": 1000}).status_code == 200
+    assert client.get("/window").json() == {"width": 1600, "height": 1000}
+    client.post("/window", json={"width": 50})
+    assert client.get("/window").json() == {"width": 400, "height": 1000}
+    client.post("/window", json={"height": 99999})
+    assert client.get("/window").json() == {"width": 400, "height": 8000}
     assert client.post("/window", json={"width": "wide"}).status_code == 422
-    poller.store.set_setting("window", "not json")
-    assert client.get("/window").json()["width"] == 1200
+
+
+@pytest.mark.parametrize("saved", ["not json", "null", "[]", '{"width": "wide"}'])
+def test_window_size_survives_a_broken_setting(client: TestClient, poller: Poller, saved: str) -> None:
+    poller.store.set_setting("window", saved)
+    assert client.get("/window").json() == {"width": 1200, "height": 820}
+
+
+@pytest.mark.parametrize("saved", ["nan", "inf", "-inf"])
+def test_text_size_survives_a_non_finite_setting(client: TestClient, poller: Poller, saved: str) -> None:
+    poller.store.set_setting("zoom", saved)
+    assert "--zoom: 1.0" in client.get("/").text
+    assert client.post("/zoom", data={"step": "in"}).json() == {"zoom": 1.1}
+
+
+@pytest.mark.parametrize("site", ["cross-site", "same-site"])
+def test_rejects_requests_from_other_sites(client: TestClient, poller: Poller, site: str) -> None:
+    response = client.get("/overview?sort=alerts&dir=asc", headers={"sec-fetch-site": site})
+    assert response.status_code == 403
+    assert poller.store.get_setting("overview_sort") is None
+
+
+@pytest.mark.parametrize("site", ["same-origin", "none"])
+def test_accepts_requests_from_the_app_itself(client: TestClient, site: str) -> None:
+    assert client.get("/", headers={"sec-fetch-site": site}).status_code == 200
 
 
 def test_sort_ties_stay_alphabetical() -> None:

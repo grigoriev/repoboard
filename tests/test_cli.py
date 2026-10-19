@@ -79,7 +79,8 @@ def test_poll_prints_counts(
     _fake_gh(monkeypatch, {"api user": {"login": "me"}, **empty_repo_routes()})
     assert main(["poll"]) == 0
     out = capsys.readouterr().out
-    assert "security   0" in out and "replies    0" in out
+    assert "security   0" in out
+    assert "replies    0" in out
 
 
 def test_poll_reports_error(

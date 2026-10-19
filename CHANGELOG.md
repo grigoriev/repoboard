@@ -28,4 +28,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - App icon. The window shows it and the name Repoboard in Cmd-Tab and the Dock. The menu bar
   process stays out of Cmd-Tab.
 - Sort the overview by any column. The sort is kept between sessions.
-- The window keeps its size and position between sessions.
+- The window keeps its size between sessions. It opens centered, so it never lands on a monitor
+  that is gone.
