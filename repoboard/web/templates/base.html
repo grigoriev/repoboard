@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="{{ language }}">
+<html lang="{{ language }}" style="--zoom: {{ zoom }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ t("app.name") }}</title>
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/htmx.min.js"></script>
+  <script src="/static/app.js" defer></script>
 </head>
 <body>
   <header class="top">
@@ -16,6 +17,11 @@
     </nav>
     <span class="spacer"></span>
     {% include "status.html" %}
+    <span class="zoom">
+      <button type="button" class="btn" data-zoom="out" aria-label="{{ t('zoom.out') }}" title="{{ t('zoom.out') }} (⌘−)">A−</button>
+      <button type="button" class="btn" data-zoom="reset" aria-label="{{ t('zoom.reset') }}" title="{{ t('zoom.reset') }} (⌘0)">A</button>
+      <button type="button" class="btn" data-zoom="in" aria-label="{{ t('zoom.in') }}" title="{{ t('zoom.in') }} (⌘+)">A+</button>
+    </span>
     <form class="lang" method="post" action="/language">
       <select name="language" aria-label="{{ t('nav.language') }}" onchange="this.form.submit()">
         {% for code, name in languages %}

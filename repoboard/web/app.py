@@ -23,6 +23,7 @@ from repoboard.triage import Section
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost"})
 KIND_ORDER = (Kind.ALERT, Kind.PR, Kind.ISSUE, Kind.DISCUSSION)
 SNOOZE_DAYS = (1, 7)
+ZOOM_MIN, ZOOM_MAX, ZOOM_STEP = 0.6, 2.0, 0.1
 
 _web = resources.files("repoboard") / "web"
 templates = Jinja2Templates(directory=str(_web / "templates"))
@@ -40,7 +41,7 @@ def item_ref(item: Item) -> str:
 def short_repo(repo: str) -> Markup:
     """Render 'owner/name' with a dimmed owner, so the name stands out in long lists."""
     owner, name = repo.split("/", 1)
-    return Markup('<span class="owner">{}/</span>{}').format(owner, name)
+    return Markup('<span class="owner">{}/</span><wbr>{}').format(owner, name)
 
 
 def create_app(poller: Poller) -> FastAPI:
@@ -61,6 +62,13 @@ def create_app(poller: Poller) -> FastAPI:
     def translator() -> Translator:
         return Translator(store.get_setting("language") or config.language)
 
+    def zoom() -> float:
+        try:
+            value = float(store.get_setting("zoom") or 1.0)
+        except ValueError:
+            value = 1.0
+        return min(max(value, ZOOM_MIN), ZOOM_MAX)
+
     def render(request: Request, name: str, **context: Any) -> HTMLResponse:
         t = translator()
         now = poller.clock()
@@ -78,6 +86,7 @@ def create_app(poller: Poller) -> FastAPI:
             repo_count=len(config.repos),
             config_path=str(config_path()),
             snooze_days=SNOOZE_DAYS,
+            zoom=f"{zoom():.1f}",
         )
         return templates.TemplateResponse(request, name, context)
 
@@ -159,6 +168,15 @@ def create_app(poller: Poller) -> FastAPI:
         if seen is not None and last and last.isoformat() != seen:
             response.headers["HX-Refresh"] = "true"
         return response
+
+    @app.post("/zoom")
+    async def set_zoom(request: Request) -> dict[str, float]:
+        step = (await form(request)).get("step")
+        current = zoom()
+        changed = {"in": current + ZOOM_STEP, "out": current - ZOOM_STEP, "reset": 1.0}.get(step or "", current)
+        value = round(min(max(changed, ZOOM_MIN), ZOOM_MAX), 1)
+        store.set_setting("zoom", f"{value:.1f}")
+        return {"zoom": value}
 
     @app.post("/language")
     async def language(request: Request) -> RedirectResponse:

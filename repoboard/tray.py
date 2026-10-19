@@ -51,6 +51,10 @@ def run_tray(
 ) -> None:  # pragma: no cover - needs the macOS menu bar
     import rumps
 
+    from repoboard.macos import brand_process
+
+    brand_process(menu_bar_only=True)
+
     class App(rumps.App):  # type: ignore[misc]
         def __init__(self) -> None:
             super().__init__("Repoboard", icon=icon_path(), template=True, quit_button=None)
