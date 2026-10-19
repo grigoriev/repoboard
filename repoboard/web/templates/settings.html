@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block main %}
+<form class="settings" method="post" action="/settings">
+  {% if saved %}<p class="note ok">{{ t("settings.saved") }}</p>{% endif %}
+  {% if error %}<p class="note error">{{ error }}</p>{% endif %}
+
+  <section class="panel">
+    <h2>{{ t("settings.owners") }}</h2>
+    <p class="note pad">{{ t("settings.owners_hint") }} {{ t("settings.patterns_hint") }}</p>
+    {% for owner in (cfg.owners | list) + [none] %}
+    {% set index = loop.index0 %}
+    <fieldset class="owner" id="owner-{{ index }}">
+      <legend class="sr-only">{{ owner.name if owner else t("settings.new_owner") }}</legend>
+      <label>{{ t("settings.owner") }}
+        <input name="owner_name" value="{{ owner.name if owner else '' }}" placeholder="{{ t('settings.new_owner') }}" autocomplete="off"></label>
+      <label>{{ t("settings.include") }}
+        <input name="owner_include" value="{{ owner.include | join(' ') if owner else '' }}" placeholder="ch.sbb.* *polarion*"></label>
+      <label>{{ t("settings.exclude") }}
+        <input name="owner_exclude" value="{{ owner.exclude | join(' ') if owner else '' }}" placeholder="articles *-old"></label>
+      <div class="types" role="group" aria-label="{{ t('settings.leave_out') }}">
+        <span class="label">{{ t("settings.leave_out") }}</span>
+        {% for kind in repo_types %}
+        <label class="check"><input type="checkbox" name="owner_types_{{ index }}" value="{{ kind }}"
+          {{ 'checked' if (owner and kind in owner.exclude_types) or (not owner and kind in ('archived', 'fork')) }}> {{ t("type." ~ kind) }}</label>
+        {% endfor %}
+      </div>
+      <div class="owner-actions">
+        <button type="button" class="btn" hx-get="/settings/preview" hx-include="#owner-{{ index }}" hx-target="#preview-{{ index }}"
+          hx-vals='js:{owner: document.querySelector("#owner-{{ index }} [name=owner_name]").value, include: document.querySelector("#owner-{{ index }} [name=owner_include]").value, exclude: document.querySelector("#owner-{{ index }} [name=owner_exclude]").value, types: Array.from(document.querySelectorAll("#owner-{{ index }} [name=owner_types_{{ index }}]:checked")).map(function (box) { return box.value; }).join(" ")}'>{{ t("settings.preview") }}</button>
+        {% if owner %}<label class="check"><input type="checkbox" name="owner_remove_{{ index }}"> {{ t("settings.remove") }}</label>{% endif %}
+        {% if owner and owner.name in discovery_errors %}<span class="note error">{{ t("settings.unreadable") }}: {{ discovery_errors[owner.name] }}</span>{% endif %}
+      </div>
+      <div class="preview" id="preview-{{ index }}" aria-live="polite"></div>
+    </fieldset>
+    {% endfor %}
+  </section>
+
+  <section class="panel">
+    <h2><label for="repos">{{ t("settings.repos") }}</label></h2>
+    <p class="note pad">{{ t("settings.repos_hint") }}</p>
+    <textarea id="repos" name="repos" rows="4" spellcheck="false">{{ cfg.repos | join('\n') }}</textarea>
+  </section>
+
+  <section class="panel">
+    <h2><label for="items">{{ t("settings.items") }}</label></h2>
+    <p class="note pad">{{ t("settings.items_hint") }}</p>
+    <textarea id="items" name="items" rows="4" spellcheck="false">{{ cfg.items | join('\n') }}</textarea>
+    {% for url, why in watched_errors.items() %}<p class="note error pad">{{ t("settings.unreadable") }}: {{ url }}: {{ why }}</p>{% endfor %}
+  </section>
+
+  <section class="panel general">
+    <h2>{{ t("settings.general") }}</h2>
+    <label>{{ t("settings.language") }}
+      <select name="language">{% for code, name in languages %}<option value="{{ code }}" {{ 'selected' if code == cfg.language }}>{{ name }}</option>{% endfor %}</select></label>
+    <label>{{ t("settings.poll_interval") }} <input name="poll_interval_minutes" type="number" min="1" value="{{ cfg.poll_interval_minutes }}"></label>
+    <label>{{ t("settings.lookback") }} <input name="lookback_days" type="number" min="1" value="{{ cfg.lookback_days }}"></label>
+    <label>{{ t("settings.hidden_tools") }} <input name="hidden_alert_tools" value="{{ cfg.hidden_alert_tools | join(', ') }}"></label>
+    <p class="note">{{ t("settings.restart_note", path=config_path) }}</p>
+  </section>
+
+  <div class="toolbar"><span class="spacer"></span><button class="btn primary" type="submit">{{ t("settings.save") }}</button></div>
+</form>
+{% endblock %}

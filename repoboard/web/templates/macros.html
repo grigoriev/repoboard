@@ -2,6 +2,8 @@
 <svg class="ic" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
 {%- if name == "check" %}<path d="M3 8.5l3.2 3.2L13 4.8"/>
 {%- elif name == "clock" %}<circle cx="8" cy="8" r="6"/><path d="M8 4.8V8l2.2 1.4"/>
+{%- elif name == "eye" %}<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/>
+{%- elif name == "eye-off" %}<path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8s-2.4 4.5-6.5 4.5S1.5 8 1.5 8z"/><path d="M2.5 13.5l11-11"/>
 {%- elif name == "bell" %}<path d="M4 11V7.5a4 4 0 0 1 8 0V11l1 1.2H3z"/><path d="M6.6 13.6a1.5 1.5 0 0 0 2.8 0"/>
 {%- endif %}</svg>
 {%- endmacro %}
@@ -41,6 +43,10 @@
     <button type="button" class="icon" data-key="{{ item.key }}" data-action="snooze-{{ days }}" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "{{ days }}"}' hx-swap="none" title="{{ hint }}">{{ icon("clock") }}<small aria-hidden="true">{{ days }}</small><span class="sr-only">{{ hint }}</span></button>
     {% endfor %}
     {% endif %}
+    {% endif %}
+    {% if item.kind.value != "alert" %}
+    {% set verb = "unwatch" if item.watched else "watch" %}
+    <button type="button" class="icon" data-key="{{ item.key }}" data-action="{{ verb }}" hx-post="/items/{{ verb }}" hx-vals='{"url": {{ item.url | tojson }}}' hx-swap="none" title="{{ t('action.' ~ verb) }}">{{ icon("eye-off" if item.watched else "eye") }}<span class="sr-only">{{ t("action." ~ verb) }}</span></button>
     {% endif %}
   </div></td>
   {% endif %}

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 import pytest
 from playwright.sync_api import Page
@@ -38,6 +39,25 @@ def broken_repo(poller: Poller) -> None:
     )
 
 
+def with_owners(poller: Poller) -> None:
+    from repoboard.config import Owner
+
+    poller.config = replace(
+        poller.config,
+        owners=(
+            Owner("grigoriev"),
+            Owner("SchweizerischeBundesbahnen", include=("ch.sbb.polarion.*",), exclude=("*.st",),
+                  exclude_types=("archived", "fork", "private")),
+        ),
+        items=("https://github.com/cli/cli/pull/12345",),
+    )  # fmt: skip
+
+
+def with_owners_ru(poller: Poller) -> None:
+    with_owners(poller)
+    language("ru")(poller)
+
+
 CASES = [
     # name, path, options for the app, options for the page
     ("inbox", "/", {}, {}),
@@ -56,6 +76,9 @@ CASES = [
     ("repo", "/repo/SchweizerischeBundesbahnen/ch.sbb.polarion.extension.pdf-exporter", {}, {}),
     ("repo-no-security-access", "/repo/intechcore/nginx-geoip2", {}, {}),
     ("repo-error", "/repo/intechcore/nginx-geoip2", {"setup": broken_repo}, {}),
+    ("settings", "/settings", {"setup": with_owners}, {}),
+    ("settings-dark", "/settings", {"setup": with_owners}, {"scheme": "dark"}),
+    ("settings-ru", "/settings", {"setup": with_owners_ru}, {}),
 ]
 
 
