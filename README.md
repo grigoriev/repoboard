@@ -13,8 +13,8 @@ menu bar, polls the repositories through the `gh` CLI and notifies you about wha
 
 The **New** tab lists what changed since you last looked. Mark an item seen: it comes back when
 someone acts on it again. Or snooze it for a day or a week: it comes back when the snooze ends. The
-**Overview** tab shows every repository with its open issues, discussions, pull requests and alerts,
-and a page per repository lists them.
+**Overview** tab shows every repository with its open issues, discussions, pull requests and alerts.
+Click a column header to sort by it. A page per repository lists the items.
 
 The UI speaks English, Russian and German. Change the text size with A- and A+ in the header, or
 with Cmd or Ctrl and +, - or 0.

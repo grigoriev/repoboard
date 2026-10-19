@@ -2,28 +2,64 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from importlib import resources
-from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from typing import Annotated, Any
+from urllib.parse import parse_qs, urlencode, urlsplit
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
+from pydantic import BaseModel
 
 from repoboard.config import LANGUAGES, config_path
 from repoboard.i18n import LANGUAGE_NAMES, Translator
 from repoboard.models import Item, Kind
 from repoboard.poller import Poller
+from repoboard.store import RepoRow
 from repoboard.triage import Section
 
 LOCAL_HOSTS = frozenset({"127.0.0.1", "localhost"})
 KIND_ORDER = (Kind.ALERT, Kind.PR, Kind.ISSUE, Kind.DISCUSSION)
 SNOOZE_DAYS = (1, 7)
 ZOOM_MIN, ZOOM_MAX, ZOOM_STEP = 0.6, 2.0, 0.1
+WINDOW_DEFAULT = {"width": 1200, "height": 820, "x": None, "y": None}
+WINDOW_LIMITS = {"width": (400, 8000), "height": (300, 8000), "x": (-20000, 20000), "y": (-20000, 20000)}
+
+# Overview columns: the sort key of a row, and the direction of the first click.
+SORT_COLUMNS: dict[str, tuple[Callable[[RepoRow], Any], str]] = {
+    "repo": (lambda row: row.repo.lower(), "asc"),
+    "unseen": (lambda row: row.unseen, "desc"),
+    "issues": (lambda row: row.open_issues, "desc"),
+    "discussions": (lambda row: row.open_discussions, "desc"),
+    "prs": (lambda row: row.open_prs, "desc"),
+    "renovate": (lambda row: row.renovate, "desc"),
+    "failed": (lambda row: row.failed, "desc"),
+    "alerts": (lambda row: row.alerts, "desc"),
+    "activity": (lambda row: row.last_activity, "desc"),
+}
+
+
+class WindowGeometry(BaseModel):
+    width: int | None = None
+    height: int | None = None
+    x: int | None = None
+    y: int | None = None
+
+
+def sort_rows(rows: list[RepoRow], column: str, direction: str) -> list[RepoRow]:
+    """Sort by one column. Rows without a value, such as a repository never polled, go last."""
+    key = SORT_COLUMNS[column][0]
+    present = [row for row in rows if key(row) is not None]
+    missing = [row for row in rows if key(row) is None]
+    present.sort(key=lambda row: row.repo.lower())  # ties stay alphabetical: the next sort is stable
+    present.sort(key=key, reverse=direction == "desc")
+    return present + missing
+
 
 _web = resources.files("repoboard") / "web"
 templates = Jinja2Templates(directory=str(_web / "templates"))
@@ -115,11 +151,37 @@ def create_app(poller: Poller) -> FastAPI:
         )
 
     @app.get("/overview", response_class=HTMLResponse)
-    def overview(request: Request, org: str | None = None) -> HTMLResponse:
+    def overview(
+        request: Request,
+        org: str | None = None,
+        sort: str | None = None,
+        sort_dir: Annotated[str | None, Query(alias="dir")] = None,
+    ) -> HTMLResponse:
+        if sort in SORT_COLUMNS and sort_dir in ("asc", "desc"):
+            store.set_setting("overview_sort", f"{sort} {sort_dir}")
+        column, _, direction = (store.get_setting("overview_sort") or "").partition(" ")
+        if column not in SORT_COLUMNS or direction not in ("asc", "desc"):
+            column, direction = "repo", "asc"
         rows = store.overview(config.repos, poller.clock())
         if org:
             rows = [row for row in rows if row.repo.startswith(f"{org}/")]
-        return render(request, "overview.html", page="overview", rows=rows, owners=owners(), org=org)
+
+        def sort_link(name: str) -> str:
+            first = SORT_COLUMNS[name][1]
+            flipped = {"asc": "desc", "desc": "asc"}[direction] if name == column else first
+            return f"/overview?{urlencode({'sort': name, 'dir': flipped, **({'org': org} if org else {})})}"
+
+        return render(
+            request,
+            "overview.html",
+            page="overview",
+            rows=sort_rows(rows, column, direction),
+            owners=owners(),
+            org=org,
+            sort_column=column,
+            sort_direction=direction,
+            sort_link=sort_link,
+        )
 
     @app.get("/repo/{owner}/{name}", response_class=HTMLResponse)
     def repo(request: Request, owner: str, name: str) -> HTMLResponse:
@@ -177,6 +239,27 @@ def create_app(poller: Poller) -> FastAPI:
         value = round(min(max(changed, ZOOM_MIN), ZOOM_MAX), 1)
         store.set_setting("zoom", f"{value:.1f}")
         return {"zoom": value}
+
+    def window_geometry() -> dict[str, int | None]:
+        try:
+            saved = json.loads(store.get_setting("window") or "{}")
+        except ValueError:
+            saved = {}
+        return {key: saved.get(key, default) for key, default in WINDOW_DEFAULT.items()}
+
+    @app.get("/window")
+    def get_window() -> dict[str, int | None]:
+        return window_geometry()
+
+    @app.post("/window")
+    def set_window(geometry: WindowGeometry) -> dict[str, int | None]:
+        merged = window_geometry()
+        for key, value in geometry.model_dump().items():
+            if value is not None:
+                low, high = WINDOW_LIMITS[key]
+                merged[key] = min(max(value, low), high)
+        store.set_setting("window", json.dumps(merged))
+        return merged
 
     @app.post("/language")
     async def language(request: Request) -> RedirectResponse:

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import io
 import subprocess
 import sys
+import threading
+import urllib.request
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -9,6 +12,7 @@ from typing import Any
 
 import pytest
 
+from repoboard import window
 from repoboard.config import Config
 from repoboard.gh import Gh
 from repoboard.i18n import Translator
@@ -99,3 +103,66 @@ def test_window_falls_back_to_browser(monkeypatch: pytest.MonkeyPatch) -> None:
     Window("http://x/").open()
     assert opened == ["http://x/"]
     Window("http://x/").close()
+
+
+class FakeResponse(io.BytesIO):
+    def __enter__(self) -> FakeResponse:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+
+def test_load_geometry(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = b'{"width": 1500, "height": 900, "x": 5, "y": 6}'
+    monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout: FakeResponse(body))
+    assert window.load_geometry("http://127.0.0.1:1/") == {"width": 1500, "height": 900, "x": 5, "y": 6}
+
+
+def test_load_geometry_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*args: Any, **kwargs: Any) -> None:
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+    assert window.load_geometry("http://127.0.0.1:1/")["width"] == window.WIDTH
+    window.save_geometry("http://127.0.0.1:1/", {"width": 1})
+
+
+def test_save_geometry_posts_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[urllib.request.Request] = []
+
+    def capture(request: urllib.request.Request, timeout: float) -> FakeResponse:
+        sent.append(request)
+        return FakeResponse(b"{}")
+
+    monkeypatch.setattr(urllib.request, "urlopen", capture)
+    window.save_geometry("http://127.0.0.1:1/", {"width": 1400})
+    assert sent[0].full_url == "http://127.0.0.1:1/window"
+    assert sent[0].get_method() == "POST"
+    assert sent[0].data == b'{"width": 1400}'
+
+
+def test_geometry_saver_coalesces_events() -> None:
+    saved: list[dict[str, int | None]] = []
+    done = threading.Event()
+
+    def save(values: dict[str, int | None]) -> None:
+        saved.append(values)
+        done.set()
+
+    saver = window.GeometrySaver(save, delay=0.05)
+    saver.resized(1000, 700)
+    saver.resized(1100.4, 749.6)
+    saver.moved(10, 20)
+    assert done.wait(2)
+    assert saved == [{"width": 1100, "height": 750, "x": 10, "y": 20}]
+    saver.flush()
+    assert len(saved) == 1
+
+
+def test_geometry_saver_stores_the_content_height() -> None:
+    saved: list[dict[str, int | None]] = []
+    saver = window.GeometrySaver(saved.append, delay=10, title_bar=28)
+    saver.resized(1000, 728)
+    saver.flush()
+    assert saved == [{"width": 1000, "height": 700}]

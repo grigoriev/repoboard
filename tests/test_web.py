@@ -241,3 +241,82 @@ def test_text_size_ignores_unknown_step(client: TestClient) -> None:
 def test_text_size_survives_a_broken_setting(client: TestClient, poller: Poller) -> None:
     poller.store.set_setting("zoom", "big")
     assert "--zoom: 1.0" in client.get("/").text
+
+
+def seed_overview(poller: Poller) -> None:
+    def issues(repo: str, count: int, hours: int) -> tuple[Item, ...]:
+        at = NOW - timedelta(hours=hours)
+        return tuple(item(str(n), repo=repo, created_at=at, updated_at=at, activity_at=None) for n in range(count))
+
+    poller.config = Config(repos=("a/bbb", "b/aaa", "c/ccc"))
+    poller.store.save_snapshots(
+        [
+            RepoSnapshot("a/bbb", issues("a/bbb", 2, 5)),
+            RepoSnapshot("b/aaa", issues("b/aaa", 5, 1)),
+            RepoSnapshot("c/ccc", ()),
+        ],
+        NOW,
+    )
+
+
+def overview_order(client: TestClient, query: str = "") -> list[str]:
+    page = client.get(f"/overview{query}").text
+    return [
+        part.split('"', 1)[0] for part in page.split('<td class="repo')[1:] for part in [part.split('title="', 1)[1]]
+    ]
+
+
+def test_overview_sorts_by_column(poller: Poller) -> None:
+    seed_overview(poller)
+    client = TestClient(create_app(poller), base_url="http://127.0.0.1")
+    assert overview_order(client) == ["a/bbb", "b/aaa", "c/ccc"]
+    assert overview_order(client, "?sort=issues&dir=desc") == ["b/aaa", "a/bbb", "c/ccc"]
+    assert overview_order(client, "?sort=issues&dir=asc") == ["c/ccc", "a/bbb", "b/aaa"]
+    assert overview_order(client, "?sort=activity&dir=desc") == ["b/aaa", "a/bbb", "c/ccc"]
+    assert overview_order(client, "?sort=activity&dir=asc") == ["a/bbb", "b/aaa", "c/ccc"]
+    assert overview_order(client, "?sort=repo&dir=desc") == ["c/ccc", "b/aaa", "a/bbb"]
+
+
+def test_overview_remembers_the_sort(poller: Poller) -> None:
+    seed_overview(poller)
+    client = TestClient(create_app(poller), base_url="http://127.0.0.1")
+    client.get("/overview?sort=issues&dir=desc")
+    assert overview_order(client) == ["b/aaa", "a/bbb", "c/ccc"]
+    assert overview_order(client, "?sort=bogus&dir=sideways") == ["b/aaa", "a/bbb", "c/ccc"]
+
+
+def test_overview_header_links_toggle_direction(poller: Poller) -> None:
+    seed_overview(poller)
+    client = TestClient(create_app(poller), base_url="http://127.0.0.1")
+    page = client.get("/overview?sort=issues&dir=desc&org=a").text
+    assert 'href="/overview?sort=issues&amp;dir=asc&amp;org=a"' in page
+    assert 'href="/overview?sort=prs&amp;dir=desc&amp;org=a"' in page
+    assert 'href="/overview?sort=repo&amp;dir=asc&amp;org=a"' in page
+    assert 'aria-sort="descending"' in page
+
+
+def test_window_geometry(client: TestClient, poller: Poller) -> None:
+    assert client.get("/window").json() == {"width": 1200, "height": 820, "x": None, "y": None}
+    assert client.post("/window", json={"width": 1600, "height": 1000, "x": 40, "y": 60}).status_code == 200
+    assert client.get("/window").json() == {"width": 1600, "height": 1000, "x": 40, "y": 60}
+    client.post("/window", json={"width": 50, "height": 99999})
+    assert client.get("/window").json() == {"width": 400, "height": 8000, "x": 40, "y": 60}
+    assert client.post("/window", json={"width": "wide"}).status_code == 422
+    poller.store.set_setting("window", "not json")
+    assert client.get("/window").json()["width"] == 1200
+
+
+def test_sort_ties_stay_alphabetical() -> None:
+    from repoboard.store import RepoRow
+    from repoboard.web.app import sort_rows
+
+    rows = [RepoRow(repo, None, None, failed=1) for repo in ("o/c", "o/a", "o/b")]
+    assert [r.repo for r in sort_rows(rows, "failed", "desc")] == ["o/a", "o/b", "o/c"]
+
+
+@pytest.mark.parametrize("saved", ["garbage", "stars desc", "repo sideways"])
+def test_overview_survives_a_broken_saved_sort(poller: Poller, saved: str) -> None:
+    seed_overview(poller)
+    poller.store.set_setting("overview_sort", saved)
+    client = TestClient(create_app(poller), base_url="http://127.0.0.1")
+    assert overview_order(client) == ["a/bbb", "b/aaa", "c/ccc"]

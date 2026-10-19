@@ -12,15 +12,12 @@
 <div class="panel rows">
   <table>
     <thead><tr>
-      <th>{{ t("overview.repo") }}</th>
-      <th class="n">{{ t("overview.unseen") }}</th>
-      <th class="n">{{ t("overview.issues") }}</th>
-      <th class="n">{{ t("overview.discussions") }}</th>
-      <th class="n">{{ t("overview.prs") }}</th>
-      <th class="n">{{ t("overview.renovate") }}</th>
-      <th class="n">{{ t("overview.failed") }}</th>
-      <th class="n">{{ t("overview.alerts") }}</th>
-      <th class="n">{{ t("overview.activity") }}</th>
+      {% for name, numeric in [("repo", false), ("unseen", true), ("issues", true), ("discussions", true), ("prs", true),
+                               ("renovate", true), ("failed", true), ("alerts", true), ("activity", true)] %}
+      <th class="{{ 'n' if numeric }}" {% if name == sort_column %}aria-sort="{{ 'ascending' if sort_direction == 'asc' else 'descending' }}"{% endif %}>
+        <a class="sort" href="{{ sort_link(name) }}">{{ t("overview." ~ name) }}{% if name == sort_column %} {{ "▲" if sort_direction == "asc" else "▼" }}{% endif %}</a>
+      </th>
+      {% endfor %}
     </tr></thead>
     <tbody>
     {% for row in rows %}
