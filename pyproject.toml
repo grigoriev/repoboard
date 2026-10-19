@@ -38,6 +38,13 @@ dev = [
     "httpx2>=2.14.0",
 ]
 
+[dependency-groups]
+# Only the visual tests use these. A group, not an extra, so --all-extras in CI leaves them out.
+visual = [
+    "playwright==1.64.0",
+    "pillow==12.3.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/grigoriev/repoboard"
 Repository = "https://github.com/grigoriev/repoboard"
@@ -53,6 +60,9 @@ packages = ["repoboard"]
 testpaths = ["tests"]
 pythonpath = ["."]
 filterwarnings = ["error"]
+# Visual tests need a browser and run in the Playwright image: scripts/visual-tests.sh.
+addopts = "-m 'not visual'"
+markers = ["visual: screenshot comparison in the Playwright image"]
 
 [tool.ruff]
 line-length = 120

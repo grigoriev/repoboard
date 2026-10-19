@@ -24,6 +24,8 @@
   "action.unseen": "Back to new",
   "action.snooze_day": "Snooze 1 day",
   "action.snooze_week": "Snooze 1 week",
+  "action.snooze_day_hint": "Hide it for one day",
+  "action.snooze_week_hint": "Hide it for one week",
   "action.unsnooze": "Unsnooze",
   "tag.checks_failure": "checks failed",
   "tag.checks_pending": "checks running",

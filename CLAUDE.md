@@ -27,6 +27,7 @@ uv run ruff format --check .                   # format check
 uv run mypy repoboard tests                    # type check
 uv run pytest --cov --cov-report=term-missing  # tests with coverage
 uv run repoboard serve                         # run the web UI with the background poller
+scripts/visual-tests.sh [--update]             # screenshot tests in the Playwright image
 ```
 
 Point `REPOBOARD_CONFIG` at a scratch config to try changes without touching your own.
@@ -46,7 +47,8 @@ Package `repoboard/`, console entry point `repoboard` (`repoboard.cli:main`):
 - `notify.py`: notification texts and backends. `tray.py`: menu bar. `window.py`: pywebview window
 - `web/app.py`: routes; `web/templates`: Jinja2; `web/static`: CSS and htmx
 
-Tests mirror the modules in `tests/test_<module>.py`. `tests/fakes.py` fakes `gh` by argument match.
+Tests mirror the modules in `tests/test_<module>.py`. `tests/visual` holds the Playwright screenshot
+tests: fixed data in `data.py`, baselines in `snapshots`. A UI change updates the baselines in the same PR. `tests/fakes.py` fakes `gh` by argument match.
 
 ## Code Style
 
@@ -72,7 +74,8 @@ Flag these in a pull request:
 
 ## CI/CD and Release
 
-- `ci.yml`: actionlint, zizmor, ruff, mypy, pytest, SonarCloud, package build
+- `ci.yml`: ShellCheck, Hadolint, actionlint, zizmor, ruff, mypy, pytest, visual tests, SonarCloud,
+  package build
 - `bump-version.yml`: manual, writes the version to `pyproject.toml`, `repoboard/__init__.py` and
   `uv.lock`, cuts the changelog section, tags `vX.Y.Z`
 - `release.yml`: on `v*` tags, tests, builds the wheel and sdist, attests provenance, creates the
