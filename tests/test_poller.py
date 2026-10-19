@@ -519,3 +519,16 @@ def test_the_poll_interval_follows_the_config(store: Store) -> None:
     assert poller.next_full_poll(100.0) == 700.0
     poller.config = Config(poll_interval_minutes=1)
     assert poller.next_full_poll(100.0) == 160.0
+
+
+def test_a_config_saved_during_a_poll_waits_for_the_next_poll(store: Store) -> None:
+    def save_settings(_: list[str]) -> dict[str, str]:
+        poller.config = Config(repos=("x/y",))
+        return {"login": "me"}
+
+    runner = FakeGhRunner({"api user": save_settings, **empty_repo_routes()})
+    poller = Poller(Config(repos=("o/r",)), store, Gh(runner), Clock())
+    poller.poll()
+    polled = " ".join(" ".join(call) for call in runner.calls)
+    assert "o/r" in polled
+    assert "x/y" not in polled

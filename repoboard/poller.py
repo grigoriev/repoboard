@@ -58,20 +58,21 @@ class Poller:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
-    def repos(self) -> tuple[str, ...]:
+    def repos(self, config: Config | None = None) -> tuple[str, ...]:
         """The repositories to poll: the single ones of the config, plus what each owner last listed."""
-        single = {repo.lower() for repo in self.config.repos}
-        listed = {repo for entry in self._listings().values() for repo in entry["repos"]}
-        return tuple(sorted([*self.config.repos, *(r for r in listed if r.lower() not in single)], key=str.lower))
+        config = config or self.config
+        single = {repo.lower() for repo in config.repos}
+        listed = {repo for entry in self._listings(config).values() for repo in entry["repos"]}
+        return tuple(sorted([*config.repos, *(r for r in listed if r.lower() not in single)], key=str.lower))
 
-    def _listings(self) -> dict[str, dict[str, Any]]:
+    def _listings(self, config: Config | None = None) -> dict[str, dict[str, Any]]:
         """The last listing of each owner of the config, by lower case name.
 
         An entry: "rule" (the owner's filters as they were listed), "at", "repos" and "error". An entry
         stays when its filters change, until the owner is listed again, so nothing flickers or is lost.
         """
         saved: dict[str, dict[str, Any]] = json.loads(self.store.get_setting("owner_listings") or "{}")
-        names = {owner.name.lower() for owner in self.config.owners}
+        names = {owner.name.lower() for owner in (config or self.config).owners}
         return {name: entry for name, entry in saved.items() if name in names}
 
     def discovery_errors(self) -> dict[str, str]:
@@ -82,11 +83,11 @@ class Poller:
             if (entry := listings.get(owner.name.lower())) and entry.get("error")
         }
 
-    def _discover(self, now: datetime) -> None:
-        listings = self._listings()
-        single = {repo.lower() for repo in self.config.repos}
+    def _discover(self, config: Config, now: datetime) -> None:
+        listings = self._listings(config)
+        single = {repo.lower() for repo in config.repos}
         added: list[str] = []
-        for owner in self.config.owners:
+        for owner in config.owners:
             entry = listings.get(owner.name.lower())
             if self._listing_is_fresh(owner, entry, now):
                 continue
@@ -128,12 +129,12 @@ class Poller:
     def watched_errors(self) -> dict[str, str]:
         return dict(json.loads(self.store.get_setting("watched_errors") or "{}"))
 
-    def _poll_watched(self, collector: Collector, now: datetime, repos: set[str] | None) -> int:
+    def _poll_watched(self, config: Config, collector: Collector, now: datetime, repos: set[str] | None) -> int:
         """Poll the watched items: all of them, or those in `repos` after the user opened one there.
 
         Returns how many could be read.
         """
-        refs = [parse_item_url(url) for url in self.config.items]
+        refs = [parse_item_url(url) for url in config.items]
         if repos is not None:
             refs = [ref for ref in refs if ref.repo in repos]
             if not refs:
@@ -173,20 +174,21 @@ class Poller:
 
     def _poll(self, repos: list[str] | None) -> list[Entry]:
         now = self.clock()
+        config = self.config  # one config for the whole poll: the settings page may replace it meanwhile
         # Silent until one poll got as far as notifying. A failed first attempt must not lift it.
         first_run = self.store.get_setting("notified_once") is None
         self.store.ensure_baseline(now)
         if self._me is None:
             self._me = self.gh.viewer_login()
-        since = now - timedelta(days=self.config.lookback_days)
+        since = now - timedelta(days=config.lookback_days)
         if repos is None:
-            self._discover(now)
-        watched = self.repos()
+            self._discover(config, now)
+        watched = self.repos(config)
         targets = list(watched) if repos is None else [r for r in repos if r in watched]
-        collector = Collector(self.gh, self._me, self.config.hidden_alert_tools)
+        collector = Collector(self.gh, self._me, config.hidden_alert_tools)
         snapshots = collector.collect_all(targets, since)
         # Watched items first: an item no longer watched then gets its plain row from the repository poll.
-        watched_read = self._poll_watched(collector, now, None if repos is None else set(repos))
+        watched_read = self._poll_watched(config, collector, now, None if repos is None else set(repos))
         self.store.save_snapshots(snapshots, now)
         if repos is None:
             self.store.forget_repos_except(watched)
