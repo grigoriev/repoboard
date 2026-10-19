@@ -100,6 +100,9 @@ def test_desktop_notifier(monkeypatch: pytest.MonkeyPatch) -> None:
         def __init__(self, app_name: str) -> None:
             sent["app"] = app_name
 
+        def request_authorisation(self) -> bool:
+            return True
+
         def send(self, **kwargs: Any) -> str:
             sent.update(kwargs)
             return "id"
@@ -151,3 +154,57 @@ def test_log_notifier(caplog: pytest.LogCaptureFixture) -> None:
 )
 def test_german_titles_follow_the_gender(kind: Kind, title: str) -> None:
     assert build([entry(Section.NEW, kind)], Translator("de"), "u")[0].title == title
+
+
+def test_desktop_notifier_refuses_without_permission(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Denied:
+        def __init__(self, app_name: str) -> None:
+            pass
+
+        def request_authorisation(self) -> bool:
+            return False
+
+    install_fake_desktop_notifier(monkeypatch, Denied, backend="MacOSNotificationCenter")
+    with pytest.raises(RuntimeError, match="not allowed"):
+        DesktopNotifier()
+
+
+def test_terminal_notifier_opens_the_item(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: calls.append(cmd))
+    notify.TerminalNotifier("/opt/homebrew/bin/terminal-notifier").send(Notification("T", "B", "https://x"))
+    assert calls == [
+        [
+            "/opt/homebrew/bin/terminal-notifier",
+            "-title",
+            "T",
+            "-message",
+            "B",
+            "-open",
+            "https://x",
+            "-group",
+            "https://x",
+        ]
+    ]
+
+
+@pytest.mark.parametrize(
+    ("native", "terminal", "platform", "expected"),
+    [
+        (True, None, "darwin", Recorder),
+        (False, "/bin/terminal-notifier", "darwin", notify.TerminalNotifier),
+        (False, None, "darwin", OsascriptNotifier),
+        (False, None, "linux", LogNotifier),
+    ],
+)
+def test_default_notifier_order(
+    monkeypatch: pytest.MonkeyPatch, native: bool, terminal: str | None, platform: str, expected: type
+) -> None:
+    def make_native() -> Recorder:
+        if not native:
+            raise RuntimeError("not allowed")
+        return Recorder()
+
+    monkeypatch.setattr("shutil.which", lambda name: terminal)
+    monkeypatch.setattr("sys.platform", platform)
+    assert isinstance(notify.default_notifier(make_native), expected)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import sys
 import webbrowser
@@ -60,6 +61,9 @@ class DesktopNotifier:
         if get_backend_class().__name__ == "DummyNotificationCenter":
             raise RuntimeError("no notification backend outside an app bundle")
         self._notifier = DesktopNotifierSync(app_name="Repoboard")
+        # macOS refuses an app without a Developer ID signature. Without permission every send is lost.
+        if not self._notifier.request_authorisation():
+            raise RuntimeError("notifications are not allowed for Repoboard")
         self._open_url = open_url
 
     def send(self, notification: Notification) -> None:
@@ -68,6 +72,26 @@ class DesktopNotifier:
             message=notification.body,
             on_clicked=lambda: self._open_url(notification.url),
         )
+
+
+class TerminalNotifier:
+    """terminal-notifier from Homebrew: works without a signed app, and a click opens the item."""
+
+    def __init__(self, executable: str) -> None:
+        self.executable = executable
+
+    def send(self, notification: Notification) -> None:
+        subprocess.run(
+            [
+                self.executable,
+                "-title", notification.title,
+                "-message", notification.body,
+                "-open", notification.url,
+                "-group", notification.url,
+            ],
+            check=False,
+            capture_output=True,
+        )  # fmt: skip
 
 
 class OsascriptNotifier:
@@ -87,12 +111,16 @@ class LogNotifier:
         log.info("%s: %s %s", notification.title, notification.body, notification.url)
 
 
-def default_notifier() -> Notifier:  # pragma: no cover - depends on the desktop
+def default_notifier(native: Callable[[], Notifier] = DesktopNotifier) -> Notifier:
+    """The best way to notify here: native, then terminal-notifier, then osascript on macOS."""
     try:
-        return DesktopNotifier()
+        return native()
     except Exception as exc:  # any backend failure falls back
         log.info("native notifications unavailable (%s), falling back", exc)
-    return OsascriptNotifier() if sys.platform == "darwin" else LogNotifier()
+    if sys.platform == "darwin":
+        terminal = shutil.which("terminal-notifier")
+        return TerminalNotifier(terminal) if terminal else OsascriptNotifier()
+    return LogNotifier()
 
 
 class NotificationListener:
