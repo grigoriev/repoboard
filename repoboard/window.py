@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import subprocess
 import sys
@@ -53,11 +54,9 @@ def save_geometry(base_url: str, geometry: Geometry) -> None:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(request, timeout=2):
-            pass
-    except OSError:
-        pass  # the size is a convenience; a missed save must not disturb the window
+    # The size is a convenience; a missed save must not disturb the window.
+    with contextlib.suppress(OSError):
+        urllib.request.urlopen(request, timeout=2).close()
 
 
 class GeometrySaver:

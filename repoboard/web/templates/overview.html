@@ -1,10 +1,5 @@
 {% extends "base.html" %}
 {% from "macros.html" import org_chips %}
-{% macro sort_th(label, name, cls) -%}
-<th class="{{ cls }}" {% if name == sort_column %}aria-sort="{{ 'ascending' if sort_direction == 'asc' else 'descending' }}"{% endif %}>
-  <a class="sort" href="{{ sort_link(name) }}">{{ label }}{% if name == sort_column %} {{ "▲" if sort_direction == "asc" else "▼" }}{% endif %}</a>
-</th>
-{%- endmacro %}
 {% block main %}
 <div class="toolbar">
   <span class="since">{{ t("toolbar.repos", count=repo_count) }}</span>
@@ -17,15 +12,12 @@
 <div class="panel rows">
   <table>
     <thead><tr>
-      {{ sort_th(t("overview.repo"), "repo", "") }}
-      {{ sort_th(t("overview.unseen"), "unseen", "n") }}
-      {{ sort_th(t("overview.issues"), "issues", "n") }}
-      {{ sort_th(t("overview.discussions"), "discussions", "n") }}
-      {{ sort_th(t("overview.prs"), "prs", "n") }}
-      {{ sort_th(t("overview.renovate"), "renovate", "n") }}
-      {{ sort_th(t("overview.failed"), "failed", "n") }}
-      {{ sort_th(t("overview.alerts"), "alerts", "n") }}
-      {{ sort_th(t("overview.activity"), "activity", "n") }}
+      {% for name, numeric in [("repo", false), ("unseen", true), ("issues", true), ("discussions", true), ("prs", true),
+                               ("renovate", true), ("failed", true), ("alerts", true), ("activity", true)] %}
+      <th class="{{ 'n' if numeric }}" {% if name == sort_column %}aria-sort="{{ 'ascending' if sort_direction == 'asc' else 'descending' }}"{% endif %}>
+        <a class="sort" href="{{ sort_link(name) }}">{{ t("overview." ~ name) }}{% if name == sort_column %} {{ "▲" if sort_direction == "asc" else "▼" }}{% endif %}</a>
+      </th>
+      {% endfor %}
     </tr></thead>
     <tbody>
     {% for row in rows %}
