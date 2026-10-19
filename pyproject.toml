@@ -24,7 +24,9 @@ dependencies = [
     "fastapi>=0.146.0",
     "jinja2>=3.1.6",
     "markupsafe>=3.0.4",
+    "pillow>=12.3.0 ; sys_platform != 'darwin'",
     "pyobjc-framework-servicemanagement>=12.2.2 ; sys_platform == 'darwin'",
+    "pystray>=0.19.5 ; sys_platform != 'darwin'",
     "pywebview>=6.2.1",
     "rumps>=0.4.0 ; sys_platform == 'darwin'",
     "uvicorn>=0.54.0",
@@ -103,5 +105,5 @@ warn_unused_configs = true
 show_error_codes = true
 
 [[tool.mypy.overrides]]
-module = ["rumps", "webview", "desktop_notifier", "AppKit", "Foundation", "ServiceManagement"]
+module = ["rumps", "webview", "desktop_notifier", "AppKit", "Foundation", "ServiceManagement", "pystray"]
 ignore_missing_imports = true

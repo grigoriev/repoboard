@@ -275,3 +275,27 @@ def test_app_path_adds_homebrew(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert macos.app_path("/usr/bin:/bin") == f"{brew}:/usr/bin:/bin"
     assert macos.app_path(f"/usr/bin:{brew}") == f"/usr/bin:{brew}"
     assert macos.app_path("") == str(brew)
+
+
+def test_badge_icon_draws_the_count() -> None:
+    from PIL import Image
+
+    from repoboard.tray import badge_icon
+
+    plain = badge_icon("")
+    badged = badge_icon("7")
+    assert plain.size == badged.size == (64, 64)
+    assert isinstance(plain, Image.Image)
+    assert plain.tobytes() != badged.tobytes()
+    assert badge_icon("123").tobytes() != badged.tobytes()
+
+
+def test_menu_entries_follow_the_state(poller: Poller) -> None:
+    from repoboard.tray import menu_entries
+
+    entries = menu_entries(tray_state(poller, Translator("ru")))
+    assert entries[0] == ("Непросмотрено", None)
+    assert ("Открыть Repoboard", "open") in entries
+    assert ("Обновить сейчас", "refresh") in entries
+    assert entries[-1] == ("Выход", "quit")
+    assert ("Новые ответы: 0", "open") in entries
