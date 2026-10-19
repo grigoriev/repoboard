@@ -20,7 +20,7 @@ done
 iconutil -c icns "$build/Repoboard.iconset" -o "$build/Repoboard.icns"
 
 version="$(uv run --quiet python -c 'import repoboard; print(repoboard.__version__)')"
-uv sync --quiet --all-extras --group app --group visual
+uv sync --quiet --extra dev --group app --group visual
 uv run --quiet pyinstaller --noconfirm --clean --windowed --log-level WARN \
     --name Repoboard \
     --icon "$build/Repoboard.icns" \
