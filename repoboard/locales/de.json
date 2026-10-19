@@ -137,5 +137,5 @@
   "tray.settings": "Einstellungen…",
   "settings.not_saved": "Nicht gespeichert: {error}",
   "settings.whole_numbers": "Abfrageintervall und Suchtiefe müssen ganze Zahlen sein",
-  "settings.changed": "die Konfiguration hat sich seit dem Öffnen der Seite geändert, zum Beispiel durch ein beobachtetes Element. Prüfen Sie die Felder und speichern Sie erneut"
+  "settings.changed": "die Konfiguration hat sich seit dem Öffnen der Seite geändert, zum Beispiel durch ein beobachtetes Element. Prüfe die Felder und speichere erneut"
 }
