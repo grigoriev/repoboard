@@ -34,3 +34,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Repoboard polls those repositories at once, so a merged pull request leaves the list in seconds.
 - The page reloads its content in place after every action and poll. Section counts stay right.
 - The number of an issue or pull request links to it. Item tables share their column widths.
+- Row actions stay readable in every language: shorter snooze labels with the full text as a hint.
+  Column widths are relative, so large text keeps room for the title.

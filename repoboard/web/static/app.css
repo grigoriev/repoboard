@@ -60,8 +60,8 @@ main { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 /* Item tables share fixed column widths, so the sections line up under each other. */
 table.items { table-layout: fixed; min-width: 720px; }
-col.c-repo { width: 21%; }
-col.c-ref { width: 8%; }
+col.c-repo { width: 20%; }
+col.c-ref { width: 9%; }
 col.c-status { width: 12%; }
 col.c-age { width: 6%; }
 col.c-act { width: 20%; }
@@ -74,7 +74,7 @@ td.repo { font-family: var(--mono); font-size: 12px; color: var(--muted); min-wi
 td.repo .owner { opacity: .6; }
 td.repo a { text-decoration: none; }
 td.repo a:hover { color: var(--accent); }
-td.num { font-family: var(--mono); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+td.num { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
 td.title a { text-decoration: none; }
 td.title a:hover { color: var(--accent); text-decoration: underline; }
 td.title .by { color: var(--muted); font-size: 12px; margin-left: 6px; }

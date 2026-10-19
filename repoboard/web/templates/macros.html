@@ -12,7 +12,7 @@
 {% macro item_row(t, age, ref, short_repo, item, entry=None, show_repo=True, actions=True, snooze_days=()) -%}
 <tr data-key="{{ item.key }}">
   {% if show_repo %}<td class="repo {{ 'unread' if entry and entry.unseen }}" title="{{ item.repo }}"><a href="/repo/{{ item.repo }}">{{ short_repo(item.repo) }}</a></td>{% endif %}
-  <td class="num {{ 'unread' if not show_repo and entry and entry.unseen }}" title="{{ ref(item) }}"><a href="{{ item.url }}" target="_blank" rel="noopener" data-key="{{ item.key }}">{{ ref(item) }}</a></td>
+  <td class="num {{ 'unread' if not show_repo and entry and entry.unseen }}"><a href="{{ item.url }}" target="_blank" rel="noopener" data-key="{{ item.key }}">{{ ref(item) }}</a></td>
   <td class="title">
     <a href="{{ item.url }}" target="_blank" rel="noopener" data-key="{{ item.key }}">{{ item.title }}</a>
     {%- if entry and entry.section.value == 'replies' and item.activity_by %}<span class="by">{{ t("reply.by", login=item.activity_by) }}</span>{% endif %}
@@ -29,7 +29,7 @@
     <button type="button" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "0"}' hx-swap="none">{{ t("action.unsnooze") }}</button>
     {% else %}
     {% for days in snooze_days %}
-    <button type="button" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "{{ days }}"}' hx-swap="none" title="{{ t('action.snooze_day_hint' if days == 1 else 'action.snooze_week_hint') }}">{{ t("action.snooze_day" if days == 1 else "action.snooze_week") }}</button>
+    <button type="button" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "{{ days }}"}' hx-swap="none" title="{{ t('action.snooze_day_hint' if days == 1 else 'action.snooze_week_hint') }}">{{ t("action.snooze_day" if days == 1 else "action.snooze_week") }}<span class="sr-only"> ({{ t('action.snooze_day_hint' if days == 1 else 'action.snooze_week_hint') }})</span></button>
     {% endfor %}
     {% endif %}
     {% endif %}
