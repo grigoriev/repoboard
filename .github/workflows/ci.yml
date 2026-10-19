@@ -43,6 +43,9 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.14", "3.15"]
+    # uv sync and uv run follow .python-version unless told otherwise. This keeps each leg on its version.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,6 +58,8 @@ jobs:
         run: uv python install "$PYTHON_VERSION"
       - name: Install dependencies
         run: uv sync --all-extras
+      - name: Check the Python version of the leg
+        run: uv run python -c 'import os, platform; v = platform.python_version(); assert v.startswith(os.environ["UV_PYTHON"] + "."), v; print(v)'
       - name: Lint with ruff
         run: |
           uv run ruff check .
@@ -67,6 +72,8 @@ jobs:
   sonar:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      UV_PYTHON: "3.14"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,7 +82,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
       - name: Set up Python
-        run: uv python install 3.14
+        run: uv python install "$UV_PYTHON"
       - name: Install dependencies
         run: uv sync --all-extras
       - name: Run tests with coverage
