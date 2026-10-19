@@ -30,17 +30,26 @@ def classify(item: Item, ignore_watch: bool = False) -> Section | None:
         return Section.WATCHED  # any change counts: a reply, a merge, a failed check
     if item.kind is Kind.ALERT:
         return Section.SECURITY
-    tags = set(item.tags)
     if item.kind is Kind.PR:
-        if Tag.DRAFT in tags:
-            return None
-        if tags & _BROKEN_TAGS:
-            return Section.FAILED
-        if item.renovate:
-            return Section.RENOVATE if tags & _WAITING_TAGS and Tag.CHECKS_PENDING not in tags else None
+        decided, section = _pull_request_state(item)
+        if decided:
+            return section
     if item.activity_at is None:
         return None
     return Section.NEW if item.activity_at == item.created_at else Section.REPLIES
+
+
+def _pull_request_state(item: Item) -> tuple[bool, Section | None]:
+    """Whether the state of a pull request decides its section, and which. Otherwise its activity does."""
+    tags = set(item.tags)
+    if Tag.DRAFT in tags:
+        return True, None
+    if tags & _BROKEN_TAGS:
+        return True, Section.FAILED
+    if item.renovate:
+        waiting = bool(tags & _WAITING_TAGS) and Tag.CHECKS_PENDING not in tags
+        return True, Section.RENOVATE if waiting else None
+    return False, None
 
 
 def marker(item: Item, section: Section) -> datetime:
