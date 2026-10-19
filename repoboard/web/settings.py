@@ -5,7 +5,8 @@ from __future__ import annotations
 import copy
 import re
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
 from fastapi import FastAPI, Request, Response
@@ -31,28 +32,67 @@ def words(text: str) -> tuple[str, ...]:
     return tuple(word for word in _SEPARATORS.split(text) if word)
 
 
+@dataclass(frozen=True)
+class Draft:
+    """The posted form as typed, not validated: a rejected save shows it again, so no edit is lost."""
+
+    owners: tuple[Owner, ...]
+    repos: tuple[str, ...]
+    items: tuple[str, ...]
+    language: str
+    poll_interval_minutes: str
+    lookback_days: str
+    hidden_alert_tools: tuple[str, ...]
+
+
+def form_owners(form: Form) -> list[dict[str, Any]]:
+    """The owner rows of the form that are filled in and not marked for removal."""
+
+    def column(name: str, index: int) -> str:
+        values = form.get(name, [])
+        return values[index] if index < len(values) else ""
+
+    return [
+        {
+            "name": name.strip(),
+            "include": list(words(column("owner_include", index))),
+            "exclude": list(words(column("owner_exclude", index))),
+            "exclude_types": form.get(f"owner_types_{index}", []),
+        }
+        for index, name in enumerate(form.get("owner_name", []))
+        if name.strip() and not form.get(f"owner_remove_{index}")
+    ]
+
+
+def form_tools(text: str) -> list[str]:
+    return [tool.strip() for tool in _LIST_SEPARATORS.split(text) if tool.strip()]
+
+
+def form_draft(form: Form, current: Config) -> Draft:
+    def one(name: str, default: str = "") -> str:
+        return (form.get(name) or [default])[0]
+
+    owners = tuple(
+        Owner(row["name"], tuple(row["include"]), tuple(row["exclude"]), tuple(row["exclude_types"]))
+        for row in form_owners(form)
+    )
+    return Draft(
+        owners=owners,
+        repos=tuple(line.strip() for line in one("repos").splitlines() if line.strip()),
+        items=tuple(line.strip() for line in one("items").splitlines() if line.strip()),
+        language=one("language", current.language),
+        poll_interval_minutes=one("poll_interval_minutes", str(current.poll_interval_minutes)),
+        lookback_days=one("lookback_days", str(current.lookback_days)),
+        hidden_alert_tools=tuple(form_tools(one("hidden_alert_tools"))),
+    )
+
+
 def form_to_config(form: Form, current: Config) -> Config:
     """Build the config the form describes. Port and database need a restart, so they stay as they are."""
 
     def one(name: str, default: str = "") -> str:
         return (form.get(name) or [default])[0]
 
-    def column(name: str, index: int) -> str:
-        values = form.get(name, [])
-        return values[index] if index < len(values) else ""
-
-    owners = []
-    for index, name in enumerate(form.get("owner_name", [])):
-        if not name.strip() or form.get(f"owner_remove_{index}"):
-            continue
-        owners.append(
-            {
-                "name": name.strip(),
-                "include": list(words(column("owner_include", index))),
-                "exclude": list(words(column("owner_exclude", index))),
-                "exclude_types": form.get(f"owner_types_{index}", []),
-            }
-        )
     try:
         poll = int(one("poll_interval_minutes", str(current.poll_interval_minutes)))
         lookback = int(one("lookback_days", str(current.lookback_days)))
@@ -62,13 +102,11 @@ def form_to_config(form: Form, current: Config) -> Config:
         {
             "repos": list(words(one("repos"))),
             "items": [line.strip() for line in one("items").splitlines() if line.strip()],
-            "owners": owners,
+            "owners": form_owners(form),
             "language": one("language", current.language),
             "poll_interval_minutes": poll,
             "lookback_days": lookback,
-            "hidden_alert_tools": [
-                tool.strip() for tool in _LIST_SEPARATORS.split(one("hidden_alert_tools")) if tool.strip()
-            ],
+            "hidden_alert_tools": form_tools(one("hidden_alert_tools")),
         }
     )
     return copy.replace(parsed, port=current.port, database=current.database)
@@ -86,7 +124,7 @@ def apply(web: Web, updated: Config) -> None:
 
 
 def add_settings_page(app: FastAPI, web: Web) -> None:
-    def page(request: Request, cfg: Config, error: str | None = None, status: int = 200) -> HTMLResponse:
+    def page(request: Request, cfg: Config | Draft, error: str | None = None, status: int = 200) -> HTMLResponse:
         response = web.render(
             request,
             "settings.html",
@@ -113,7 +151,8 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
         except ConfigError as exc:
             t = web.translator()
             reason = t(str(exc)) if str(exc) == WHOLE_NUMBERS else str(exc)
-            return page(request, web.poller.config, error=t("settings.not_saved", error=reason), status=400)
+            draft = form_draft(form, web.poller.config)
+            return page(request, draft, error=t("settings.not_saved", error=reason), status=400)
         apply(web, updated)
         # The page sets the language, so the choice of the header switcher must not override it.
         web.store.set_setting("language", updated.language)

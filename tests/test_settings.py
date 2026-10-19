@@ -190,3 +190,24 @@ def test_errors_are_translated(client: TestClient) -> None:
     page = client.post("/settings", data={"poll_interval_minutes": "often"}).text
     assert "Nicht gespeichert" in page
     assert "ganze Zahlen" in page
+
+
+def test_a_rejected_save_keeps_what_was_typed(client: TestClient) -> None:
+    form = {
+        "owner_name": ["acme", "beta"],
+        "owner_include": ["", "x*"],
+        "owner_exclude": ["", ""],
+        "owner_types_1": ["private"],
+        "repos": "cli/cli\nnot a repo",
+        "items": "https://github.com/o/r/issues/1",
+        "poll_interval_minutes": "15",
+        "lookback_days": "14",
+        "hidden_alert_tools": "Semgrep OSS",
+    }
+    page = client.post("/settings", data=form).text
+    assert 'value="beta"' in page
+    assert 'value="x*"' in page
+    assert "not a repo" in page
+    assert "https://github.com/o/r/issues/1" in page
+    assert 'value="15"' in page
+    assert 'value="Semgrep OSS"' in page
