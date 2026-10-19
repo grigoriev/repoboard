@@ -89,3 +89,17 @@ def test_poll_reports_error(
     _fake_gh(monkeypatch, {"api user": GhError("not logged in")})
     assert main(["poll"]) == 1
     assert "not logged in" in capsys.readouterr().err
+
+
+def test_port_probe_matches_uvicorn_reuse(monkeypatch: pytest.MonkeyPatch) -> None:
+    options: list[tuple[int, int, int]] = []
+    real = socket.socket
+
+    class Spy(real):  # type: ignore[misc,valid-type]
+        def setsockopt(self, *args: Any) -> None:
+            options.append(args)
+            super().setsockopt(*args)
+
+    monkeypatch.setattr(socket, "socket", Spy)
+    assert port_free(0)
+    assert (socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) in options
