@@ -141,6 +141,14 @@ def file_version(web: Web) -> str:
         return ""  # a broken file: the save reports it
 
 
+def checked_form_to_config(form: Form, current: Config) -> Config:
+    """form_to_config, refused when the form shows an older config than the file holds now."""
+    shown = form.get("version", [""])[0]
+    if shown and shown != version(current):
+        raise ConfigError(CHANGED)
+    return form_to_config(form, current)
+
+
 def apply(web: Web, edit: Callable[[Config], Config]) -> Config:
     """Edit the config file, save it and hand it to the poller, which lists the owners again on its next poll."""
     with EDITS:
@@ -188,15 +196,8 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
     @app.post("/settings", response_model=None)
     async def save(request: Request) -> Response:
         form = await read_multi_form(request)
-
-        def edit(current: Config) -> Config:
-            shown = form.get("version", [""])[0]
-            if shown and shown != version(current):
-                raise ConfigError(CHANGED)
-            return form_to_config(form, current)
-
         try:
-            updated = apply(web, edit)
+            updated = apply(web, lambda current: checked_form_to_config(form, current))
         except (ConfigError, OSError) as exc:
             t = web.translator()
             reason = t(str(exc)) if str(exc) in (WHOLE_NUMBERS, CHANGED) else str(exc)
