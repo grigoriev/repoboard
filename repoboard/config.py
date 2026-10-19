@@ -26,9 +26,25 @@ class ConfigError(ValueError):
     """The config file is invalid."""
 
 
+OWNER_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
+# Repository types an owner can leave out, as in the type filter of GitHub.
+REPO_TYPES = ("archived", "fork", "mirror", "template", "private", "public")
+
+
+@dataclass(frozen=True)
+class Owner:
+    """Every repository of a user or an organization, narrowed by name patterns and types."""
+
+    name: str
+    include: tuple[str, ...] = ()  # name patterns; empty takes every repository
+    exclude: tuple[str, ...] = ()
+    exclude_types: tuple[str, ...] = ("archived", "fork")
+
+
 @dataclass(frozen=True)
 class Config:
     repos: tuple[str, ...] = ()
+    owners: tuple[Owner, ...] = ()
     language: str = "en"
     poll_interval_minutes: int = 10
     lookback_days: int = 14
@@ -72,6 +88,7 @@ def parse(data: dict[str, object]) -> Config:
         raise ConfigError("hidden_alert_tools must be a list of tool names")
     return Config(
         repos=tuple(dict.fromkeys(repos)),
+        owners=_owners(data.get("owners", [])),
         language=str(language),
         poll_interval_minutes=_positive_int(data, "poll_interval_minutes", defaults.poll_interval_minutes),
         lookback_days=_positive_int(data, "lookback_days", defaults.lookback_days),
@@ -79,6 +96,34 @@ def parse(data: dict[str, object]) -> Config:
         database=Path(database).expanduser() if isinstance(database, str) else defaults.database,
         hidden_alert_tools=tuple(hidden),
     )
+
+
+def _strings(entry: dict[str, object], key: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    value = entry.get(key, list(default))
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ConfigError(f"owners: {key} must be a list of strings")
+    return tuple(value)
+
+
+def _owners(value: object) -> tuple[Owner, ...]:
+    if not isinstance(value, list) or not all(isinstance(entry, dict) for entry in value):
+        raise ConfigError("owners must be a list of [[owners]] tables")
+    owners: list[Owner] = []
+    for entry in value:
+        name = entry.get("name")
+        if not isinstance(name, str) or not OWNER_PATTERN.match(name):
+            raise ConfigError(f"owners: invalid name {name!r}")
+        if any(owner.name.lower() == name.lower() for owner in owners):
+            raise ConfigError(f"owners: {name} appears twice")
+        types = _strings(entry, "exclude_types", Owner("x").exclude_types)
+        unknown = [kind for kind in types if kind not in REPO_TYPES]
+        if unknown:
+            raise ConfigError(f"owners: unknown repository types {', '.join(unknown)}")
+        owners.append(
+            Owner(name, include=_strings(entry, "include", ()), exclude=_strings(entry, "exclude", ()),
+                  exclude_types=types)
+        )  # fmt: skip
+    return tuple(owners)
 
 
 def _positive_int(data: dict[str, object], key: str, default: int) -> int:
@@ -104,7 +149,18 @@ def dump(config: Config) -> str:
         f"port = {config.port}\n"
         f"database = {json.dumps(str(config.database))}\n"
         f"hidden_alert_tools = {json.dumps(list(config.hidden_alert_tools))}\n"
-        f"repos = [\n{repos}]\n"
+        f"repos = [\n{repos}]\n" + "".join(_dump_owner(owner) for owner in config.owners)
+    )
+
+
+def _dump_owner(owner: Owner) -> str:
+    def strings(values: tuple[str, ...]) -> str:
+        return json.dumps(list(values))
+
+    return (
+        f"\n[[owners]]\nname = {json.dumps(owner.name)}\n"
+        f"include = {strings(owner.include)}\nexclude = {strings(owner.exclude)}\n"
+        f"exclude_types = {strings(owner.exclude_types)}\n"
     )
 
 

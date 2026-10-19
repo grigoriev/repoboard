@@ -39,6 +39,17 @@ def build(entries: Sequence[Entry], t: Translator, inbox_url: str) -> list[Notif
     return [single(entry, t) for entry in entries]
 
 
+def build_new_repos(repos: Sequence[str], t: Translator, inbox_url: str) -> list[Notification]:
+    if len(repos) > MAX_SINGLE:
+        shown = ", ".join([*repos[:MAX_SINGLE], "…"])
+        return [Notification(t("notify.new_repos", count=len(repos)), shown, f"{inbox_url.rstrip('/')}/overview")]
+    notifications = []
+    for repo in repos:
+        owner, name = repo.split("/", 1)
+        notifications.append(Notification(t("notify.new_repo", owner=owner), name, f"https://github.com/{repo}"))
+    return notifications
+
+
 def single(entry: Entry, t: Translator) -> Notification:
     item = entry.item
     repo = item.repo.split("/", 1)[1]
@@ -165,7 +176,14 @@ class NotificationListener:
         self.inbox_url = inbox_url
 
     def __call__(self, entries: list[Entry]) -> None:
-        for notification in build(entries, self.translator(), self.inbox_url):
+        self._send_all(build(entries, self.translator(), self.inbox_url))
+
+    def new_repos(self, repos: list[str]) -> None:
+        """Poller repo listener: repositories that appeared under a watched owner."""
+        self._send_all(build_new_repos(repos, self.translator(), self.inbox_url))
+
+    def _send_all(self, notifications: list[Notification]) -> None:
+        for notification in notifications:
             try:
                 self.notifier.send(notification)
             except Exception:  # a broken notifier must not stop polling

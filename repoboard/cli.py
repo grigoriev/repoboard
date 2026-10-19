@@ -149,7 +149,9 @@ def tray(cfg: config.Config) -> int:  # pragma: no cover - needs the macOS menu 
     def translator() -> Translator:
         return Translator(store.get_setting("language") or cfg.language)
 
-    poller.listeners.append(NotificationListener(default_notifier(), translator, url))
+    notifications = NotificationListener(default_notifier(), translator, url)
+    poller.listeners.append(notifications)
+    poller.repo_listeners.append(notifications.new_repos)
     server = uvicorn.Server(uvicorn.Config(create_app(poller), host="127.0.0.1", port=cfg.port, log_level="warning"))
     threading.Thread(target=server.run, name="repoboard-web", daemon=True).start()
     poller.start()

@@ -40,6 +40,7 @@ Package `repoboard/`, console entry point `repoboard` (`repoboard.cli:main`):
 - `config.py`: TOML config, validation, Alfred list import
 - `gh.py`: the only place that runs `gh`. `Gh` takes a runner, so tests inject fakes
 - `collector.py`: issues, pull requests, discussions and alerts of one repository into `Item`s
+- `discovery.py`: lists the repositories of the owners (REST, to spare the GraphQL quota) and filters them
 - `models.py`: `Item`, `RepoSnapshot` and the enums
 - `triage.py`: which inbox section an item belongs to, and its marker time. Pure functions
 - `store.py`: SQLite snapshots, seen, snooze and notified marks, inbox and overview queries

@@ -144,7 +144,7 @@ class Web:
         return self.store.get_setting("data_version") or "never"
 
     def owners(self) -> list[str]:
-        return sorted({repo.split("/", 1)[0] for repo in self.config.repos}, key=str.lower)
+        return sorted({repo.split("/", 1)[0] for repo in self.poller.repos()}, key=str.lower)
 
     def render(self, request: Request, name: str, **context: Any) -> HTMLResponse:
         t = self.translator()
@@ -160,7 +160,7 @@ class Web:
             last_poll=self.poller.last_poll(),
             polling=self.poller.polling,
             poll_error=self.poller.last_error,
-            repo_count=len(self.config.repos),
+            repo_count=len(self.poller.repos()),
             config_path=str(config_path()),
             snooze_days=SNOOZE_DAYS,
             zoom=f"{self.zoom():.1f}",
@@ -218,7 +218,7 @@ def add_pages(app: FastAPI, web: Web) -> None:
         if sort in SORT_COLUMNS and sort_dir in ("asc", "desc"):
             web.store.set_setting("overview_sort", f"{sort} {sort_dir}")
         column, direction = parse_sort(web.store.get_setting("overview_sort"))
-        rows = by_org(web.store.overview(web.config.repos, web.poller.clock()), org, lambda row: row.repo)
+        rows = by_org(web.store.overview(web.poller.repos(), web.poller.clock()), org, lambda row: row.repo)
         return web.render(
             request,
             "overview.html",

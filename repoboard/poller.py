@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import dataclasses
+import json
 import logging
 import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from repoboard.collector import Collector
 from repoboard.config import Config
+from repoboard.discovery import resolve
 from repoboard.gh import Gh, GhError
 from repoboard.store import Entry, Store
 
@@ -21,6 +25,9 @@ Listener = Callable[[list[Entry]], None]
 # A repository the user opened an item of is "touched": it is polled again when the user comes back
 # to Repoboard, and once more a little later, so a merge on GitHub shows up without a full poll.
 TOUCH_TTL = timedelta(minutes=30)
+# How long the repository list of the owners stays valid. New repositories show up after this at most.
+DISCOVERY_TTL = timedelta(hours=1)
+RepoListener = Callable[[list[str]], None]
 FOLLOW_UP_SECONDS = 30.0
 
 
@@ -37,6 +44,7 @@ class Poller:
         self.gh = gh
         self.clock = clock
         self.listeners: list[Listener] = []
+        self.repo_listeners: list[RepoListener] = []  # told about repositories that appeared under an owner
         self.polling = False
         self.last_error: str | None = None
         self._me: str | None = None
@@ -49,6 +57,37 @@ class Poller:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    def repos(self) -> tuple[str, ...]:
+        """The repositories to poll: the single ones of the config, plus what the owners last listed."""
+        return tuple(sorted({*self.config.repos, *self._saved_listing().get("repos", [])}, key=str.lower))
+
+    def _owners_key(self) -> str:
+        return json.dumps([dataclasses.astuple(owner) for owner in self.config.owners])
+
+    def _saved_listing(self) -> dict[str, Any]:
+        """The last listing of the owners, or nothing when the owners in the config changed since."""
+        saved: dict[str, Any] = json.loads(self.store.get_setting("discovered") or "{}")
+        return saved if saved.get("owners") == self._owners_key() else {}
+
+    def discovery_errors(self) -> dict[str, str]:
+        return dict(self._saved_listing().get("errors", {}))
+
+    def _discover(self, now: datetime) -> None:
+        if not self.config.owners:
+            return
+        saved = self._saved_listing()
+        if "at" in saved and now - datetime.fromisoformat(saved["at"]) < DISCOVERY_TTL:
+            return
+        assert self._me is not None
+        resolved = resolve(self.gh, self.config, self._me)
+        owned = sorted(set(resolved.repos) - set(self.config.repos), key=str.lower)
+        listing = {"at": now.isoformat(), "owners": self._owners_key(), "repos": owned, "errors": resolved.errors}
+        self.store.set_setting("discovered", json.dumps(listing))
+        if "at" in saved:  # the first listing is the starting point, not news
+            added = sorted(set(owned) - set(saved.get("repos", [])), key=str.lower)
+            for listener in self.repo_listeners if added else ():
+                listener(added)
 
     def last_poll(self) -> datetime | None:
         value = self.store.get_setting("last_poll")
@@ -84,12 +123,15 @@ class Poller:
         if self._me is None:
             self._me = self.gh.viewer_login()
         since = now - timedelta(days=self.config.lookback_days)
-        targets = list(self.config.repos) if repos is None else [r for r in repos if r in self.config.repos]
+        if repos is None:
+            self._discover(now)
+        watched = self.repos()
+        targets = list(watched) if repos is None else [r for r in repos if r in watched]
         collector = Collector(self.gh, self._me, self.config.hidden_alert_tools)
         snapshots = collector.collect_all(targets, since)
         self.store.save_snapshots(snapshots, now)
         if repos is None:
-            self.store.forget_repos_except(self.config.repos)
+            self.store.forget_repos_except(watched)
             self.store.set_setting("last_poll", now.isoformat())
         # The UI reloads its content whenever this changes: after a full or a partial poll.
         self.store.set_setting("data_version", f"{now.isoformat()}#{time.monotonic_ns()}")

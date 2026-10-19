@@ -257,3 +257,19 @@ def test_deferred_notifier_does_not_block_and_takes_over_when_ready() -> None:
     deferred.send(Notification("late", "b", "u"))
     assert [n.title for n in fallback.sent] == ["early"]
     assert [n.title for n in native.sent] == ["late"]
+
+
+def test_new_repositories_are_announced() -> None:
+    recorder = Recorder()
+    listener = NotificationListener(recorder, lambda: Translator("de"), "http://inbox")
+    listener.new_repos(["acme/tool", "acme/lib"])
+    assert recorder.sent == [
+        Notification("Neues Repository in acme", "tool", "https://github.com/acme/tool"),
+        Notification("Neues Repository in acme", "lib", "https://github.com/acme/lib"),
+    ]
+    many = [f"acme/r{n}" for n in range(5)]
+    recorder.sent.clear()
+    listener.new_repos(many)
+    assert recorder.sent == [
+        Notification("5 neue Repositories", "acme/r0, acme/r1, acme/r2, …", "http://inbox/overview")
+    ]
