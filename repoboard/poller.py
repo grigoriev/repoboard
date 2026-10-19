@@ -12,7 +12,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from repoboard.collector import Collector
-from repoboard.config import Config, Owner
+from repoboard.config import Config, Owner, parse_item_url
 from repoboard.discovery import list_owner, matches
 from repoboard.gh import Gh, GhError
 from repoboard.store import Entry, Store
@@ -125,6 +125,26 @@ class Poller:
             news = [repo for repo in listed if repo.lower() not in known]
         return {"rule": rule, "at": now.isoformat(), "repos": listed, "error": None}, news
 
+    def watched_errors(self) -> dict[str, str]:
+        return dict(json.loads(self.store.get_setting("watched_errors") or "{}"))
+
+    def _poll_watched(self, collector: Collector, now: datetime, repos: set[str] | None) -> int:
+        """Poll the watched items: all of them, or those in `repos` after the user opened one there.
+
+        Returns how many could be read.
+        """
+        refs = [parse_item_url(url) for url in self.config.items]
+        if repos is not None:
+            refs = [ref for ref in refs if ref.repo in repos]
+            if not refs:
+                return 0
+        items, errors = collector.watched_items(refs)
+        failed = {f"{ref.repo}#{ref.kind}#{ref.number}" for ref in refs if ref.url in errors}
+        self.store.save_watched(items, now, None if repos is None else {ref.repo for ref in refs}, keep=failed)
+        if repos is None:
+            self.store.set_setting("watched_errors", json.dumps(errors))
+        return len(items)
+
     def last_poll(self) -> datetime | None:
         value = self.store.get_setting("last_poll")
         return datetime.fromisoformat(value) if value else None
@@ -165,6 +185,8 @@ class Poller:
         targets = list(watched) if repos is None else [r for r in repos if r in watched]
         collector = Collector(self.gh, self._me, self.config.hidden_alert_tools)
         snapshots = collector.collect_all(targets, since)
+        # Watched items first: an item no longer watched then gets its plain row from the repository poll.
+        watched_read = self._poll_watched(collector, now, None if repos is None else set(repos))
         self.store.save_snapshots(snapshots, now)
         if repos is None:
             self.store.forget_repos_except(watched)
@@ -175,7 +197,7 @@ class Poller:
         if not self.listeners:
             return []  # leave the notifications to a process that delivers them, such as the tray
         fresh = self.store.take_notifications(now, silent=first_run)
-        if any(snapshot.error is None for snapshot in snapshots):
+        if watched_read or any(snapshot.error is None for snapshot in snapshots):
             self.store.set_setting("notified_once", now.isoformat())
         for listener in self.listeners:
             listener(fresh)

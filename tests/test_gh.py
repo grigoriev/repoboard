@@ -91,3 +91,9 @@ def test_server_error() -> None:
     assert GhError("x", 502).server_error
     assert not GhError("x", 404).server_error
     assert not GhError("x").server_error
+
+
+def test_graphql_passes_integers_typed() -> None:
+    runner = FakeRunner('{"data": {}}')
+    Gh(runner).graphql("q", name="2048", number=3)
+    assert runner.calls == [["api", "graphql", "-f", "query=q", "-f", "name=2048", "-F", "number=3"]]

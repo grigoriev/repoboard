@@ -145,8 +145,27 @@ def snapshots() -> list[RepoSnapshot]:
     ]
 
 
+def watched() -> list[Item]:
+    return [
+        item(
+            "cli/cli",
+            Kind.PR,
+            "12345",
+            "feat: add gh repo watch",
+            author="carol",
+            open=False,
+            tags=(Tag.MERGED,),
+            created_at=ago(days=9),
+            updated_at=ago(minutes=20),
+            activity_at=ago(minutes=20),
+            activity_by="carol",
+        )
+    ]
+
+
 def seed(store: Store) -> None:
     store.set_setting("baseline", ago(days=7).isoformat())
     store.save_snapshots(snapshots(), NOW)
+    store.save_watched(watched(), NOW)
     store.set_setting("last_poll", ago(minutes=2).isoformat())
     store.set_setting("data_version", "fixed")

@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 
+from repoboard.config import ItemRef
 from repoboard.gh import Gh, GhError
 from repoboard.models import Access, AlertSource, Item, Kind, RepoSnapshot, Tag
 
@@ -68,6 +69,24 @@ def latest_activity(events: Iterable[tuple[str, datetime]], me: str) -> tuple[da
         return None, None
     at, login = max(foreign)
     return at, login
+
+
+DISCUSSION_QUERY = """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    discussion(number: $number) {
+      number title url createdAt updatedAt closed isAnswered
+      author { login }
+      comments(last: 20) {
+        nodes {
+          createdAt author { login }
+          replies(last: 1) { nodes { createdAt author { login } } }
+        }
+      }
+    }
+  }
+}
+"""
 
 
 class Collector:
@@ -188,7 +207,7 @@ class Collector:
             return [], 0
         return [self._discussion(repo, node) for node in data["discussions"]["nodes"]], data["open"]["totalCount"]
 
-    def _discussion(self, repo: str, node: dict[str, Any]) -> Item:
+    def _discussion(self, repo: str, node: dict[str, Any], watched: bool = False) -> Item:
         author = _login(node.get("author"))
         created = parse_time(node["createdAt"])
         events = [(author, created)]
@@ -209,7 +228,69 @@ class Collector:
             activity_at=activity_at,
             activity_by=activity_by,
             tags=(Tag.ANSWERED,) if node.get("isAnswered") else (),
+            watched=watched,
         )
+
+    def watched_items(self, refs: Sequence[ItemRef]) -> tuple[list[Item], dict[str, str]]:
+        """The watched pull requests, issues and discussions, and the links that could not be read."""
+        items: list[Item] = []
+        errors: dict[str, str] = {}
+        for ref in refs:
+            try:
+                items.append(self.watched_item(ref))
+            except GhError as exc:
+                errors[ref.url] = str(exc)
+        return items, errors
+
+    def watched_item(self, ref: ItemRef) -> Item:
+        if ref.kind == Kind.DISCUSSION:
+            owner, name = ref.repo.split("/", 1)
+            data = self.gh.graphql(DISCUSSION_QUERY, owner=owner, name=name, number=int(ref.number))
+            return self._discussion(ref.repo, data["data"]["repository"]["discussion"], watched=True)
+        # REST, not GraphQL: one item at a time, and the polls of whole repositories need the GraphQL quota.
+        node = self.gh.json(["api", f"repos/{ref.repo}/issues/{ref.number}"])
+        comments = self.gh.paginate(f"repos/{ref.repo}/issues/{ref.number}/comments?per_page=100")
+        author = _login(node.get("user"))
+        created = parse_time(node["created_at"])
+        events = [(author, created)] + [(_login(c.get("user")), parse_time(c["created_at"])) for c in comments]
+        activity_at, activity_by = latest_activity(events, self.me)
+        is_pr = "pull_request" in node
+        return Item(
+            repo=ref.repo,
+            kind=Kind.PR if is_pr else Kind.ISSUE,
+            number=ref.number,
+            title=node["title"],
+            url=node["html_url"],
+            author=author,
+            open=node["state"] == "open",
+            created_at=created,
+            updated_at=parse_time(node["updated_at"]),
+            activity_at=activity_at,
+            activity_by=activity_by,
+            tags=self._watched_pr_tags(ref) if is_pr else (),
+            watched=True,
+        )
+
+    def _watched_pr_tags(self, ref: ItemRef) -> tuple[Tag, ...]:
+        pr = self.gh.json(["api", f"repos/{ref.repo}/pulls/{ref.number}"])
+        runs = self.gh.json(["api", f"repos/{ref.repo}/commits/{pr['head']['sha']}/check-runs?per_page=100"])
+        # REST lists every run, a cancelled duplicate too. The pull request page shows the latest run per check.
+        latest: dict[str, dict[str, Any]] = {}
+        for run in sorted(runs["check_runs"], key=lambda run: run.get("id", 0)):
+            latest[run.get("name", str(run.get("id")))] = run
+        rollup = [
+            {"__typename": "CheckRun", "status": run["status"].upper(), "conclusion": (run["conclusion"] or "").upper()}
+            for run in latest.values()
+        ]
+        checks = check_state(rollup)
+        tags = [checks] if checks else []
+        if pr.get("merged"):
+            tags.append(Tag.MERGED)
+        elif pr.get("mergeable_state") == "dirty":
+            tags.append(Tag.CONFLICT)
+        if pr.get("draft"):
+            tags.append(Tag.DRAFT)
+        return tuple(tags)
 
     def alerts(self, repo: str) -> tuple[list[Item], dict[AlertSource, Access]]:
         items: list[Item] = []

@@ -74,6 +74,9 @@ owners, single repositories, or both:
   own, and Repoboard announces them. `include` and `exclude` narrow the list by name patterns,
   `exclude_types` by type: archived, fork, mirror, template, private, public.
 - `repos` lists single repositories.
+- `items` lists single pull requests, issues and discussions by their links, in any repository.
+  They have their own section, **Watched**, and show up there on every change: a reply, a merge,
+  a failed check. `repoboard watch <link>` and `repoboard unwatch <link>` edit the list.
 
 To import the visible repositories of the Alfred GitHub workflow:
 
@@ -90,6 +93,7 @@ repoboard import-alfred
 | `repoboard serve` | Polls and serves the UI on `http://127.0.0.1:8765/` in the browser. |
 | `repoboard poll` | Polls once and prints the number of items per section. |
 | `repoboard import-alfred` | Adds the repositories of the Alfred GitHub workflow to the config. |
+| `repoboard watch <link>` | Watches one pull request, issue or discussion. `unwatch` stops it. |
 
 The first poll looks back one week and sends no notifications. Later polls notify about each new
 item, or send one summary when more than three arrive at once.

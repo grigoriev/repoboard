@@ -8,9 +8,9 @@
 
 {% macro pills(t, item) -%}
 <span class="pills">
-  {%- if not item.open %}<span class="pill closed">{{ t("tag.closed") }}</span>{% endif -%}
+  {%- if not item.open and "merged" not in item.tags %}<span class="pill closed">{{ t("tag.closed") }}</span>{% endif -%}
   {%- for tag in item.tags %}
-  <span class="pill {{ {'checks_failure': 'bad', 'conflict': 'bad', 'critical': 'bad', 'high': 'bad', 'secret': 'bad',
+  <span class="pill {{ {'checks_failure': 'bad', 'conflict': 'bad', 'merged': 'closed', 'critical': 'bad', 'high': 'bad', 'secret': 'bad',
     'review_required': 'warn', 'no_automerge': 'warn', 'blocked': 'warn', 'behind': 'warn', 'medium': 'warn',
     'checks_pending': 'muted', 'draft': 'muted', 'low': 'muted', 'answered': 'ok'}.get(tag.value, 'muted') }}">{{ t("tag." ~ tag.value) }}</span>
   {%- endfor %}

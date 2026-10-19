@@ -54,6 +54,7 @@ def entry(section: Section, kind: Kind = Kind.ISSUE, number: str = "1") -> Entry
         (Section.SECURITY, Kind.ALERT, "Security alert in repo"),
         (Section.FAILED, Kind.PR, "Pull request failed in repo"),
         (Section.RENOVATE, Kind.PR, "Renovate waits in repo"),
+        (Section.WATCHED, Kind.PR, "Update in repo"),
     ],
 )
 def test_single(section: Section, kind: Kind, title: str) -> None:

@@ -430,3 +430,85 @@ def test_repositories_a_wider_filter_lets_in_are_not_news(store: Store) -> None:
     poller.poll()
     assert poller.repos() == ("acme/a", "acme/b")
     assert added == []
+
+
+def watched_routes() -> dict[str, Any]:
+    issue = {
+        "number": 7, "title": "Watched", "html_url": "https://github.com/cli/cli/issues/7", "user": {"login": "bob"},
+        "state": "open", "created_at": "2026-10-19T08:00:00Z", "updated_at": "2026-10-19T08:30:00Z",
+    }  # fmt: skip
+    return {
+        "repos/cli/cli/issues/7/comments": [[]],
+        "repos/cli/cli/issues/7": issue,
+        "repos/cli/cli/issues/8": GhError("gone", 404),
+    }
+
+
+def test_watched_items_are_polled(store: Store) -> None:
+    runner = FakeGhRunner({"api user": {"login": "me"}, **watched_routes(), **empty_repo_routes()})
+    cfg = Config(items=("https://github.com/cli/cli/issues/7", "https://github.com/cli/cli/issues/8"))
+    poller = Poller(cfg, store, Gh(runner), Clock())
+    poller.poll()
+    assert [i.key for i in store.items()] == ["cli/cli#issue#7"]
+    assert store.items()[0].watched
+    assert poller.watched_errors() == {"https://github.com/cli/cli/issues/8": "gone"}
+    assert [e.item.number for e in store.inbox(NOW)[Section.WATCHED]] == ["7"]
+
+
+def test_partial_poll_refreshes_watched_items_of_the_touched_repository(store: Store) -> None:
+    runner = FakeGhRunner({"api user": {"login": "me"}, **watched_routes(), **empty_repo_routes()})
+    poller = Poller(Config(items=("https://github.com/cli/cli/issues/7",)), store, Gh(runner), Clock())
+    poller.poll()
+    runner.calls.clear()
+    poller.poll(["cli/cli"])
+    assert any("repos/cli/cli/issues/7" in " ".join(call) for call in runner.calls)
+    assert [i.number for i in store.items()] == ["7"]
+    runner.calls.clear()
+    poller.poll(["other/repo"])
+    assert runner.calls == []
+    assert [i.number for i in store.items()] == ["7"]
+
+
+def test_a_config_with_only_watched_items_notifies(store: Store) -> None:
+    runner = FakeGhRunner({"api user": {"login": "me"}, **watched_routes(), **empty_repo_routes()})
+    poller = Poller(Config(items=("https://github.com/cli/cli/issues/7",)), store, Gh(runner), Clock())
+    poller.listeners.append(lambda entries: None)
+    poller.poll()
+    assert store.get_setting("notified_once") is not None
+
+
+def test_unwatching_an_item_of_a_polled_repository_keeps_it(store: Store) -> None:
+    issue = {
+        "number": 7, "title": "Bug", "url": "https://github.com/o/r/issues/7", "author": {"login": "bob"},
+        "state": "OPEN", "createdAt": "2026-10-19T08:00:00Z", "updatedAt": "2026-10-19T08:30:00Z",
+    }  # fmt: skip
+    rest = {
+        "number": 7, "title": "Bug", "html_url": "https://github.com/o/r/issues/7", "user": {"login": "bob"},
+        "state": "open", "created_at": "2026-10-19T08:00:00Z", "updated_at": "2026-10-19T08:30:00Z",
+    }  # fmt: skip
+    routes = {
+        "api user": {"login": "me"},
+        "repos/o/r/issues/7/comments": [[]],
+        "repos/o/r/issues/7": rest,
+        **empty_repo_routes(),
+        "issue list": [issue],
+    }
+    poller = Poller(
+        Config(repos=("o/r",), items=("https://github.com/o/r/issues/7",)), store, Gh(FakeGhRunner(routes)), Clock()
+    )
+    poller.poll()
+    assert [(i.number, i.watched) for i in store.items()] == [("7", True)]
+    poller.config = Config(repos=("o/r",))
+    poller.poll()
+    assert [(i.number, i.watched) for i in store.items()] == [("7", False)]
+
+
+def test_a_watched_link_that_fails_once_keeps_its_state(store: Store) -> None:
+    routes = {"api user": {"login": "me"}, **watched_routes(), **empty_repo_routes()}
+    runner = FakeGhRunner(routes)
+    poller = Poller(Config(items=("https://github.com/cli/cli/issues/7",)), store, Gh(runner), Clock())
+    poller.poll()
+    runner.routes["repos/cli/cli/issues/7"] = GhError("Bad Gateway", 502)
+    poller.poll()
+    assert [i.number for i in store.items()] == ["7"]
+    assert poller.watched_errors() == {"https://github.com/cli/cli/issues/7": "Bad Gateway"}

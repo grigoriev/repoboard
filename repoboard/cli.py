@@ -30,6 +30,10 @@ def build_parser() -> argparse.ArgumentParser:
     # The menu bar starts the window through this command when Repoboard runs as an app bundle.
     window = commands.add_parser("window", help=argparse.SUPPRESS)
     window.add_argument("url")
+    watch = commands.add_parser("watch", help="watch one pull request, issue or discussion by its link")
+    watch.add_argument("url")
+    unwatch = commands.add_parser("unwatch", help="stop watching a pull request, issue or discussion")
+    unwatch.add_argument("url")
     return parser
 
 
@@ -46,6 +50,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         window_main([args.url])
         return 0
+    if args.command in ("watch", "unwatch"):
+        return change_watch(cfg, args.command, args.url)
     if args.command == "import-alfred":
         return import_alfred(cfg)
     if args.command == "poll":
@@ -55,6 +61,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "tray" or (args.command is None and sys.platform == "darwin"):
         return tray(cfg)
     build_parser().print_help()
+    return 0
+
+
+def change_watch(cfg: config.Config, command: str, url: str) -> int:
+    try:
+        updated = config.watch(cfg, url) if command == "watch" else config.unwatch(cfg, url)
+    except config.ConfigError as exc:
+        print(f"repoboard: {exc}", file=sys.stderr)
+        return 2
+    config.save(updated)
+    verb = "watching" if command == "watch" else "stopped watching"
+    print(f"{verb} {config.parse_item_url(url).url}")
     return 0
 
 

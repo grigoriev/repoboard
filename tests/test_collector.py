@@ -301,3 +301,120 @@ def test_hidden_alert_tools_are_left_out() -> None:
     runner = FakeGhRunner({**empty_repo_routes(), "code-scanning/alerts": [[code, codeql]]})
     collector = Collector(Gh(runner), me="me", hidden_alert_tools=("scorecard",))
     assert [item.number for item in collector.collect("o/r", SINCE).items] == ["code_scanning/10"]
+
+
+def rest_issue(number: int, **extra: Any) -> dict[str, Any]:
+    return {
+        "number": number,
+        "title": f"Watched {number}",
+        "html_url": f"https://github.com/cli/cli/issues/{number}",
+        "user": {"login": "alice"},
+        "state": "open",
+        "created_at": "2026-09-01T10:00:00Z",
+        "updated_at": "2026-10-05T10:00:00Z",
+        **extra,
+    }
+
+
+def test_watched_issue() -> None:
+    from repoboard.config import parse_item_url
+
+    routes = {
+        "repos/cli/cli/issues/7/comments": [[{"user": {"login": "bob"}, "created_at": "2026-10-05T09:00:00Z"}]],
+        "repos/cli/cli/issues/7": rest_issue(7, state="closed"),
+    }
+    c, _ = collector(routes)
+    item = c.watched_item(parse_item_url("https://github.com/cli/cli/issues/7"))
+    assert (item.kind, item.number, item.open, item.watched) == (Kind.ISSUE, "7", False, True)
+    assert item.activity_by == "bob"
+    assert item.url == "https://github.com/cli/cli/issues/7"
+
+
+def test_watched_pull_request() -> None:
+    from repoboard.config import parse_item_url
+
+    routes = {
+        "repos/cli/cli/issues/9/comments": [[]],
+        "repos/cli/cli/issues/9": rest_issue(9, pull_request={}, html_url="https://github.com/cli/cli/pull/9"),
+        "repos/cli/cli/pulls/9": {"merged": False, "draft": False, "mergeable_state": "dirty", "head": {"sha": "abc"}},
+        "repos/cli/cli/commits/abc/check-runs": {
+            "check_runs": [
+                {"id": 1, "name": "lint", "status": "completed", "conclusion": "failure"},
+                {"id": 2, "name": "test", "status": "in_progress", "conclusion": None},
+            ]
+        },
+    }
+    c, _ = collector(routes)
+    item = c.watched_item(parse_item_url("https://github.com/cli/cli/pull/9"))
+    assert item.kind is Kind.PR
+    assert item.tags == (Tag.CHECKS_FAILURE, Tag.CONFLICT)
+
+
+def test_watched_merged_pull_request() -> None:
+    from repoboard.config import parse_item_url
+
+    routes = {
+        "repos/cli/cli/issues/9/comments": [[]],
+        "repos/cli/cli/issues/9": rest_issue(9, pull_request={}, state="closed"),
+        "repos/cli/cli/pulls/9": {"merged": True, "draft": True, "mergeable_state": "unknown", "head": {"sha": "abc"}},
+        "repos/cli/cli/commits/abc/check-runs": {"check_runs": [{"status": "in_progress", "conclusion": None}]},
+    }
+    c, _ = collector(routes)
+    assert c.watched_item(parse_item_url("https://github.com/cli/cli/pull/9")).tags == (
+        Tag.CHECKS_PENDING,
+        Tag.MERGED,
+        Tag.DRAFT,
+    )
+
+
+def test_watched_discussion() -> None:
+    from repoboard.config import parse_item_url
+
+    node = {
+        "number": 3,
+        "title": "Idea",
+        "url": "https://github.com/o/r/discussions/3",
+        "createdAt": "2026-09-01T10:00:00Z",
+        "updatedAt": "2026-10-04T10:00:00Z",
+        "closed": False,
+        "isAnswered": False,
+        "author": {"login": "me"},
+        "comments": {"nodes": [{**comment("erin", "2026-10-04T10:00:00Z"), "replies": {"nodes": []}}]},
+    }
+    c, runner = collector({"api graphql": {"data": {"repository": {"discussion": node}}}})
+    item = c.watched_item(parse_item_url("https://github.com/o/r/discussions/3"))
+    assert "number=3" in runner.calls[0][runner.calls[0].index("-F") + 1]
+    assert (item.kind, item.watched, item.activity_by) == (Kind.DISCUSSION, True, "erin")
+
+
+def test_watched_items_collects_and_reports_errors() -> None:
+    from repoboard.config import parse_item_url
+
+    routes = {
+        "repos/cli/cli/issues/7/comments": [[]],
+        "repos/cli/cli/issues/7": rest_issue(7),
+        "repos/cli/cli/issues/8": GhError("Not Found", 404),
+    }
+    c, _ = collector(routes)
+    refs = [parse_item_url(f"https://github.com/cli/cli/issues/{n}") for n in (7, 8)]
+    items, errors = c.watched_items(refs)
+    assert [i.number for i in items] == ["7"]
+    assert errors == {"https://github.com/cli/cli/issues/8": "Not Found"}
+
+
+def test_watched_pull_request_counts_only_the_latest_run_of_each_check() -> None:
+    from repoboard.config import parse_item_url
+
+    runs = [
+        {"id": 1, "name": "lint", "status": "completed", "conclusion": "cancelled"},
+        {"id": 2, "name": "lint", "status": "completed", "conclusion": "success"},
+        {"id": 3, "name": "test", "status": "completed", "conclusion": "success"},
+    ]
+    routes = {
+        "repos/cli/cli/issues/9/comments": [[]],
+        "repos/cli/cli/issues/9": rest_issue(9, pull_request={}),
+        "repos/cli/cli/pulls/9": {"merged": False, "draft": False, "mergeable_state": "clean", "head": {"sha": "abc"}},
+        "repos/cli/cli/commits/abc/check-runs": {"check_runs": runs},
+    }
+    c, _ = collector(routes)
+    assert c.watched_item(parse_item_url("https://github.com/cli/cli/pull/9")).tags == ()

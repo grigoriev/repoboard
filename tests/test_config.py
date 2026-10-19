@@ -147,3 +147,43 @@ def test_owners_round_trip(tmp_path: Path) -> None:
     path = tmp_path / "c.toml"
     config.save(original, path)
     assert config.load(path) == original
+
+
+@pytest.mark.parametrize(
+    ("url", "repo", "kind", "number", "canonical"),
+    [
+        ("https://github.com/cli/cli/pull/123", "cli/cli", "pr", "123", "https://github.com/cli/cli/pull/123"),
+        ("https://github.com/cli/cli/issues/7", "cli/cli", "issue", "7", "https://github.com/cli/cli/issues/7"),
+        ("https://github.com/o/r/discussions/17#x", "o/r", "discussion", "17", "https://github.com/o/r/discussions/17"),
+        ("github.com/o/r/pull/5/files", "o/r", "pr", "5", "https://github.com/o/r/pull/5"),
+    ],
+)
+def test_parse_item_url(url: str, repo: str, kind: str, number: str, canonical: str) -> None:
+    parsed = config.parse_item_url(url)
+    assert (parsed.repo, parsed.kind, parsed.number, parsed.url) == (repo, kind, number, canonical)
+
+
+@pytest.mark.parametrize(
+    "url", ["https://gitlab.com/o/r/issues/1", "https://github.com/o/r", "https://github.com/o/r/pull/x"]
+)
+def test_parse_item_url_rejects(url: str) -> None:
+    with pytest.raises(ConfigError):
+        config.parse_item_url(url)
+
+
+def test_items_in_the_config(tmp_path: Path) -> None:
+    path = tmp_path / "c.toml"
+    path.write_text('items = ["https://github.com/cli/cli/pull/123", "https://github.com/cli/cli/pull/123/files"]\n')
+    loaded = config.load(path)
+    assert loaded.items == ("https://github.com/cli/cli/pull/123",)
+    config.save(loaded, path)
+    assert config.load(path) == loaded
+    with pytest.raises(ConfigError):
+        config.parse({"items": ["nope"]})
+
+
+def test_watch_and_unwatch() -> None:
+    cfg = config.watch(Config(), "https://github.com/o/r/issues/3")
+    assert cfg.items == ("https://github.com/o/r/issues/3",)
+    assert config.watch(cfg, "https://github.com/o/r/issues/3").items == cfg.items
+    assert config.unwatch(cfg, "github.com/o/r/issues/3#issuecomment-9").items == ()

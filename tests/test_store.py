@@ -189,3 +189,102 @@ def test_mark_seen_of_an_unknown_key_uses_the_click_time(store: Store) -> None:
     store.mark_seen(["o/r#issue#404"], NOW)
     store.save_snapshots([RepoSnapshot("o/r", (item("404"),))], NOW)
     assert store.inbox(NOW)[Section.NEW] == []
+
+
+def test_watched_items_survive_their_repository_snapshot(store: Store) -> None:
+    watched = item("7", Kind.PR, repo="cli/cli", watched=True, tags=(Tag.MERGED,), open=False)
+    store.save_watched([watched], NOW)
+    store.save_snapshots([RepoSnapshot("cli/cli", (item("1", repo="cli/cli"),))], NOW)
+    assert {i.number: i.watched for i in store.items("cli/cli")} == {"1": False, "7": True}
+    store.save_watched([], NOW)
+    assert [i.number for i in store.items("cli/cli")] == ["1"]
+    assert [e.item.number for e in store.inbox(NOW)[Section.WATCHED]] == []
+
+
+def test_watched_item_in_a_watched_repository(store: Store) -> None:
+    store.save_snapshots([RepoSnapshot("o/r", (item("1"),))], NOW)
+    store.save_watched([item("1", watched=True)], NOW)
+    store.save_snapshots([RepoSnapshot("o/r", (item("1"),))], NOW)
+    store.save_watched([item("1", watched=True)], NOW)
+    (only,) = store.items("o/r")
+    assert only.watched
+    assert [e.section for e in store.entries(NOW)] == [Section.WATCHED]
+
+
+def test_old_database_gets_the_watched_column(tmp_path: Path) -> None:
+    import sqlite3
+
+    path = tmp_path / "old.sqlite3"
+    db = sqlite3.connect(path)
+    db.execute(
+        "CREATE TABLE items (key TEXT PRIMARY KEY, repo TEXT NOT NULL, kind TEXT NOT NULL, number TEXT NOT NULL,"
+        " title TEXT NOT NULL, url TEXT NOT NULL, author TEXT NOT NULL, open INTEGER NOT NULL,"
+        " created_at TEXT NOT NULL, updated_at TEXT NOT NULL, activity_at TEXT, activity_by TEXT,"
+        " tags TEXT NOT NULL, renovate INTEGER NOT NULL)"
+    )
+    db.commit()
+    db.close()
+    migrated = Store(path)
+    migrated.save_watched([item("1", watched=True)], NOW)
+    assert migrated.items()[0].watched
+    migrated.close()
+
+
+def test_forgetting_repositories_keeps_watched_items(store: Store) -> None:
+    store.save_watched([item("7", repo="cli/cli")], NOW)
+    store.forget_repos_except([])
+    assert [i.number for i in store.items()] == ["7"]
+
+
+def test_save_watched_of_some_repositories(store: Store) -> None:
+    store.save_watched([item("1", repo="a/a"), item("2", repo="b/b")], NOW)
+    store.save_watched([item("3", repo="a/a")], NOW, repos={"a/a"})
+    assert sorted(i.key for i in store.items()) == ["a/a#issue#3", "b/b#issue#2"]
+
+
+def test_a_watched_item_comes_back_when_its_state_changes(store: Store) -> None:
+    pr = item("9", Kind.PR, repo="cli/cli")
+    store.save_watched([pr], NOW)
+    store.mark_seen([pr.key], NOW)
+    assert store.inbox(NOW)[Section.WATCHED] == []
+    store.save_watched([pr], NOW + HOUR)  # nothing changed
+    assert store.inbox(NOW + HOUR)[Section.WATCHED] == []
+    store.save_watched([replace(pr, tags=(Tag.CHECKS_FAILURE,))], NOW + 2 * HOUR)
+    assert [e.item.number for e in store.inbox(NOW + 2 * HOUR)[Section.WATCHED]] == ["9"]
+
+
+def test_overview_counts_watched_pull_requests_by_their_state(store: Store) -> None:
+    items = (item("1", Kind.PR, tags=(Tag.CHECKS_FAILURE,)),)
+    store.save_snapshots([RepoSnapshot("o/r", items)], NOW)
+    store.save_watched(
+        [item("1", Kind.PR, tags=(Tag.CHECKS_FAILURE,)), item("2", Kind.PR, open=False, tags=(Tag.MERGED,))], NOW
+    )
+    (row,) = store.overview(["o/r"], NOW)
+    assert (row.open_prs, row.failed) == (1, 1)
+
+
+def test_a_resurfaced_watched_item_stays_until_seen(store: Store) -> None:
+    pr = item("9", Kind.PR, repo="cli/cli")
+    store.save_watched([pr], NOW)
+    store.mark_seen([pr.key], NOW)
+    failed = replace(pr, tags=(Tag.CHECKS_FAILURE,))
+    store.save_watched([failed], NOW + HOUR)
+    store.save_watched([failed], NOW + 2 * HOUR)  # GitHub still reports the old updated_at
+    assert [e.item.number for e in store.inbox(NOW + 2 * HOUR)[Section.WATCHED]] == ["9"]
+
+
+def test_a_watched_item_in_a_polled_repository_notices_its_change(store: Store) -> None:
+    pr = item("9", Kind.PR)
+    store.save_snapshots([RepoSnapshot("o/r", (pr,))], NOW)
+    store.save_watched([pr], NOW)
+    store.mark_seen([pr.key], NOW)
+    failed = replace(pr, tags=(Tag.CHECKS_FAILURE,))
+    store.save_snapshots([RepoSnapshot("o/r", (failed,))], NOW + HOUR)  # the repository poll runs first
+    store.save_watched([failed], NOW + HOUR)
+    assert [e.item.number for e in store.inbox(NOW + HOUR)[Section.WATCHED]] == ["9"]
+
+
+def test_save_watched_keeps_the_rows_of_links_that_failed(store: Store) -> None:
+    store.save_watched([item("1", repo="a/a"), item("2", repo="a/a")], NOW)
+    store.save_watched([item("1", repo="a/a")], NOW, keep={"a/a#issue#2"})
+    assert sorted(i.number for i in store.items()) == ["1", "2"]

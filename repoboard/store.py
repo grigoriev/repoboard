@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS items (
     activity_at TEXT,
     activity_by TEXT,
     tags TEXT NOT NULL,
-    renovate INTEGER NOT NULL
+    renovate INTEGER NOT NULL,
+    watched INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS items_repo ON items(repo);
 CREATE TABLE IF NOT EXISTS repos (
@@ -103,6 +104,9 @@ class Store:
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
+        columns = {row["name"] for row in self._db.execute("PRAGMA table_info(items)")}
+        if "watched" not in columns:  # a database from before watched items
+            self._db.execute("ALTER TABLE items ADD COLUMN watched INTEGER NOT NULL DEFAULT 0")
 
     def close(self) -> None:
         self._db.close()
@@ -140,9 +144,11 @@ class Store:
         with self._tx() as db:
             for snapshot in snapshots:
                 if snapshot.error is None:
-                    db.execute("DELETE FROM items WHERE repo = ?", (snapshot.repo,))
+                    # A watched item belongs to the watched poll: the repository poll leaves its row alone,
+                    # so the watched poll can still compare the state it last saw.
+                    db.execute("DELETE FROM items WHERE repo = ? AND watched = 0", (snapshot.repo,))
                     db.executemany(
-                        "INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT OR IGNORE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         [self._item_row(item) for item in snapshot.items],
                     )
                     open_discussions, security = snapshot.open_discussions, json.dumps(snapshot.security)
@@ -157,15 +163,45 @@ class Store:
                     (snapshot.repo, now.isoformat(), snapshot.error, open_discussions, security),
                 )
 
+    def save_watched(
+        self, items: Iterable[Item], now: datetime, repos: set[str] | None = None, keep: set[str] | None = None
+    ) -> None:
+        """Replace the watched items with the latest poll of them: all, or those of `repos`.
+
+        The rows of `keep`, keys of links that could not be read this time, stay as they are, as a
+        repository keeps its rows when its snapshot fails.
+        """
+        with self._tx() as db:
+            previous = {
+                row["key"]: row
+                for row in db.execute("SELECT key, repo, tags, open, updated_at FROM items WHERE watched = 1")
+            }
+            stale = [key for key, row in previous.items() if key not in (keep or set())]
+            stale = [key for key in stale if repos is None or previous[key]["repo"] in repos]
+            db.executemany("DELETE FROM items WHERE watched = 1 AND key = ?", [(key,) for key in stale])
+            rows = []
+            for item in items:
+                updated = item.updated_at
+                before = previous.get(item.key)
+                if before:
+                    # GitHub does not touch updated_at for a failed check or a new conflict. Count such a
+                    # change here, and never move the time back, so the item stays until it is seen.
+                    stored = _dt(before["updated_at"])
+                    updated = max(updated, stored) if stored else updated
+                    if (before["tags"], bool(before["open"])) != (",".join(item.tags), item.open):
+                        updated = max(updated, now)
+                rows.append(self._item_row(item, watched=True, updated_at=updated))
+            db.executemany("INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+
     def forget_repos_except(self, repos: Iterable[str]) -> None:
         keep = list(repos)
         marks = ",".join("?" * len(keep)) or "''"
         with self._tx() as db:
-            db.execute(f"DELETE FROM items WHERE repo NOT IN ({marks})", keep)
+            db.execute(f"DELETE FROM items WHERE repo NOT IN ({marks}) AND watched = 0", keep)
             db.execute(f"DELETE FROM repos WHERE repo NOT IN ({marks})", keep)
 
     @staticmethod
-    def _item_row(item: Item) -> tuple[object, ...]:
+    def _item_row(item: Item, watched: bool | None = None, updated_at: datetime | None = None) -> tuple[object, ...]:
         return (
             item.key,
             item.repo,
@@ -176,11 +212,12 @@ class Store:
             item.author,
             int(item.open),
             _ts(item.created_at),
-            _ts(item.updated_at),
+            _ts(updated_at or item.updated_at),
             _ts(item.activity_at),
             item.activity_by,
             ",".join(item.tags),
             int(item.renovate),
+            int(item.watched if watched is None else watched),
         )
 
     @staticmethod
@@ -202,6 +239,7 @@ class Store:
             activity_by=row["activity_by"],
             tags=tuple(Tag(t) for t in row["tags"].split(",") if t),
             renovate=bool(row["renovate"]),
+            watched=bool(row["watched"]),
         )
 
     def items(self, repo: str | None = None) -> list[Item]:
@@ -313,27 +351,26 @@ class Store:
         for entry in self.entries(now):
             if entry.unseen and entry.snoozed_until is None:
                 unseen[entry.item.repo] = unseen.get(entry.item.repo, 0) + 1
-        rows: list[RepoRow] = []
-        for repo in repos:
-            state = polled.get(repo)
-            items = items_by_repo.get(repo, [])
-            sections = [classify(item) for item in items]
-            rows.append(
-                RepoRow(
-                    repo=repo,
-                    polled_at=_dt(state["polled_at"]) if state else None,
-                    error=state["error"] if state else None,
-                    open_issues=sum(1 for i in items if i.kind is Kind.ISSUE and i.open),
-                    open_discussions=state["open_discussions"] if state else 0,
-                    open_prs=sum(1 for i in items if i.kind is Kind.PR),
-                    renovate=sections.count(Section.RENOVATE),
-                    failed=sections.count(Section.FAILED),
-                    alerts=sections.count(Section.SECURITY),
-                    unseen=unseen.get(repo, 0),
-                    last_activity=max((i.updated_at for i in items if i.kind is not Kind.ALERT), default=None),
-                    security={
-                        AlertSource(k): Access(v) for k, v in json.loads(state["security"] if state else "{}").items()
-                    },
-                )
-            )
-        return rows
+        return [
+            self._repo_row(repo, polled.get(repo), items_by_repo.get(repo, []), unseen.get(repo, 0)) for repo in repos
+        ]
+
+    @staticmethod
+    def _repo_row(repo: str, state: sqlite3.Row | None, items: list[Item], unseen: int) -> RepoRow:
+        # A watched item counts by its state, as it would without the watch.
+        sections = [classify(item, ignore_watch=True) for item in items]
+        security = json.loads(state["security"]) if state else {}
+        return RepoRow(
+            repo=repo,
+            polled_at=_dt(state["polled_at"]) if state else None,
+            error=state["error"] if state else None,
+            open_issues=sum(1 for i in items if i.kind is Kind.ISSUE and i.open),
+            open_discussions=state["open_discussions"] if state else 0,
+            open_prs=sum(1 for i in items if i.kind is Kind.PR and i.open),
+            renovate=sections.count(Section.RENOVATE),
+            failed=sections.count(Section.FAILED),
+            alerts=sections.count(Section.SECURITY),
+            unseen=unseen,
+            last_activity=max((i.updated_at for i in items if i.kind is not Kind.ALERT), default=None),
+            security={AlertSource(k): Access(v) for k, v in security.items()},
+        )

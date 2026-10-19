@@ -115,3 +115,13 @@ def test_quit_closes_the_window_before_the_server() -> None:
     )
     stop()
     assert order == ["window", "poller", "server"]
+
+
+def test_watch_and_unwatch(config_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["watch", "https://github.com/cli/cli/pull/5/files"]) == 0
+    assert config.load(config_file).items == ("https://github.com/cli/cli/pull/5",)
+    assert "watching https://github.com/cli/cli/pull/5" in capsys.readouterr().out
+    assert main(["unwatch", "https://github.com/cli/cli/pull/5"]) == 0
+    assert config.load(config_file).items == ()
+    assert main(["watch", "https://example.com/x"]) == 2
+    assert "not a GitHub" in capsys.readouterr().err
