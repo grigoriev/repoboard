@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from repoboard import __version__, config
+from repoboard import __version__, cli, config
 from repoboard.cli import main, port_free
 from repoboard.gh import Gh, GhError
 from tests.fakes import FakeGhRunner, empty_repo_routes
@@ -104,3 +104,14 @@ def test_port_probe_matches_uvicorn_reuse(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(socket, "socket", Spy)
     assert port_free(0)
     assert (socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) in options
+
+
+def test_quit_closes_the_window_before_the_server() -> None:
+    order: list[str] = []
+    stop = cli.quit_sequence(
+        close_window=lambda: order.append("window"),
+        stop_poller=lambda: order.append("poller"),
+        stop_server=lambda: order.append("server"),
+    )
+    stop()
+    assert order == ["window", "poller", "server"]

@@ -237,3 +237,11 @@ def test_window_defaults_have_one_source() -> None:
     from repoboard.web import app
 
     assert app.WINDOW_DEFAULT == {"width": window.WIDTH, "height": window.HEIGHT}
+
+
+def test_closing_from_the_menu_saves_the_size_first() -> None:
+    order: list[str] = []
+    saver = window.GeometrySaver(lambda values: order.append(f"save {values}"), delay=10)
+    saver.resized(900, 600)
+    window.close_window(saver, lambda: order.append("destroy"))()
+    assert order == ["save {'width': 900, 'height': 600}", "destroy"]

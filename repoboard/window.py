@@ -71,6 +71,16 @@ class Window:
             self._process.terminate()
 
 
+def close_window(saver: GeometrySaver, destroy: Callable[[], object]) -> Callable[[], None]:
+    """Close for the menu bar. pywebview's destroy() skips the closing event, so save the size first."""
+
+    def close() -> None:
+        saver.flush()
+        destroy()
+
+    return close
+
+
 def follow_commands(stream: BinaryIO, focus: Callable[[], object], close: Callable[[], object]) -> None:
     """Run the parent's commands until "close" or the end of the stream, then close the window."""
     for line in stream:
@@ -168,7 +178,10 @@ def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens
         window.show()
 
     threading.Thread(
-        target=follow_commands, args=(sys.stdin.buffer, focus, window.destroy), name="repoboard-commands", daemon=True
+        target=follow_commands,
+        args=(sys.stdin.buffer, focus, close_window(saver, window.destroy)),
+        name="repoboard-commands",
+        daemon=True,
     ).start()
     webview.start()
 
