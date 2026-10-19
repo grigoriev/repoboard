@@ -18,3 +18,6 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - English, Russian and German translations. English is the default.
 - Background poller: polls every interval or on demand and reports new items. The first poll
   stays silent.
+- Local web UI on 127.0.0.1: the inbox with seen and snooze actions, an overview of every
+  repository, a page per repository and a language switch.
+- Commands `repoboard serve`, `repoboard poll` and `repoboard import-alfred`.

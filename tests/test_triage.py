@@ -55,4 +55,5 @@ def test_classify(item: Item, section: Section | None) -> None:
 def test_marker() -> None:
     assert marker(make(activity_at=T2), Section.REPLIES) == T2
     assert marker(make(Kind.PR), Section.FAILED) == T3
+    assert marker(make(Kind.ALERT), Section.SECURITY) == T3
     assert marker(make(activity_at=None), Section.NEW) == T3

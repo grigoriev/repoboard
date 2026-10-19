@@ -44,7 +44,9 @@ def test_creates_parent_directory(tmp_path: Path) -> None:
     s = Store(tmp_path / "a" / "db.sqlite3")
     s.set_setting("x", "1")
     s.close()
-    assert Store(tmp_path / "a" / "db.sqlite3").get_setting("x") == "1"
+    reopened = Store(tmp_path / "a" / "db.sqlite3")
+    assert reopened.get_setting("x") == "1"
+    reopened.close()
 
 
 def test_baseline_is_set_once(store: Store) -> None:
@@ -91,13 +93,14 @@ def test_inbox_sections_and_baseline(store: Store) -> None:
         item("3", created_at=old, updated_at=old, activity_at=old),
         item("4", Kind.PR, renovate=True, activity_at=None, tags=(Tag.REVIEW_REQUIRED,), updated_at=old),
         item("dependabot/1", Kind.ALERT),
+        item("dependabot/2", Kind.ALERT, created_at=old, updated_at=old, activity_at=old),
     )
     store.save_snapshots([RepoSnapshot("o/r", items)], NOW)
     inbox = store.inbox(NOW)
     assert [e.item.number for e in inbox[Section.NEW]] == ["1"]
     assert [e.item.number for e in inbox[Section.REPLIES]] == ["2"]
     assert [e.item.number for e in inbox[Section.RENOVATE]] == ["4"]
-    assert [e.item.number for e in inbox[Section.SECURITY]] == ["dependabot/1"]
+    assert [e.item.number for e in inbox[Section.SECURITY]] == ["dependabot/1", "dependabot/2"]
     assert inbox[Section.FAILED] == []
 
 

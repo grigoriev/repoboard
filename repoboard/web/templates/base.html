@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="{{ language }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ t("app.name") }}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+  <header class="top">
+    <span class="brand">{{ t("app.name") }}</span>
+    <nav class="tabs">
+      <a class="tab {{ 'active' if page == 'inbox' }}" href="/">{{ t("nav.inbox") }}</a>
+      <a class="tab {{ 'active' if page == 'overview' }}" href="/overview">{{ t("nav.overview") }}</a>
+    </nav>
+    <span class="spacer"></span>
+    {% include "status.html" %}
+    <form class="lang" method="post" action="/language">
+      <select name="language" aria-label="Language" onchange="this.form.submit()">
+        {% for code, name in languages %}
+        <option value="{{ code }}" {{ 'selected' if code == language }}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </header>
+  <main>
+    {% block main %}{% endblock %}
+  </main>
+</body>
+</html>

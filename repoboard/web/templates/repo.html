@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "macros.html" import item_row %}
+{% block main %}
+<div class="repo-head">
+  <a class="btn" href="/overview">← {{ t("repo.back") }}</a>
+  <h1>{{ repo }}</h1>
+  <a class="note" href="https://github.com/{{ repo }}" target="_blank" rel="noopener">{{ t("repo.on_github") }} ↗</a>
+</div>
+{% if row and row.error %}<p class="note error">{{ t("repo.error", error=row.error) }}</p>{% endif %}
+{% if row %}
+{% for source, access in row.security.items() if access.value != "ok" %}
+<p class="note">{{ source.value.replace("_", " ") }}: {{ t("security." ~ access.value) }}</p>
+{% endfor %}
+{% endif %}
+{% set ns = namespace(any=false) %}
+{% for kind, items in groups if items %}
+{% set ns.any = true %}
+<section class="panel">
+  <h2>{{ t("group." ~ kind.value) }} <span class="count">{{ items | length }}</span></h2>
+  <div class="rows"><table><tbody>
+    {% for item in items %}{{ item_row(t, age, ref, short_repo, item, entries.get(item.key), show_repo=False, snooze_days=snooze_days) }}{% endfor %}
+  </tbody></table></div>
+</section>
+{% endfor %}
+{% if not ns.any %}<div class="panel"><p class="empty">{{ t("repo.none") }}</p></div>{% endif %}
+{% endblock %}

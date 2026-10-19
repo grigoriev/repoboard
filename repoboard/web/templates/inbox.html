@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "macros.html" import item_row, org_chips %}
+{% block main %}
+<div class="toolbar">
+  <span class="since">
+    {%- if baseline %}{{ t("toolbar.since", time=baseline.strftime("%Y-%m-%d %H:%M")) }} · {% endif -%}
+    {{ t("toolbar.repos", count=repo_count) }}
+  </span>
+  <form method="post" action="/seen-all"><button class="btn" type="submit">{{ t("toolbar.seen_all") }}</button></form>
+  <button class="btn primary" type="button" hx-post="/refresh" hx-swap="none">{{ t("toolbar.refresh") }}</button>
+</div>
+{{ org_chips(t, owners, org, "/") }}
+{% if not repo_count %}
+<div class="panel"><p class="empty">{{ t("empty.no_repos", path=config_path) }}</p></div>
+{% elif not total %}
+<div class="panel"><p class="empty">{{ t("inbox.empty") }}</p></div>
+{% else %}
+<div class="panel">
+  {% for section, entries in sections if entries %}
+  <details class="sec" open>
+    <summary><span class="stripe {{ section.value }}"></span>{{ t("section." ~ section.value) }} <span class="count">{{ entries | length }}</span></summary>
+    <div class="rows"><table><tbody>
+      {% for entry in entries %}{{ item_row(t, age, ref, short_repo, entry.item, entry, snooze_days=snooze_days) }}{% endfor %}
+    </tbody></table></div>
+  </details>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

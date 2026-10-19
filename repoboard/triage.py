@@ -19,7 +19,7 @@ class Section(StrEnum):
 
 
 # State sections list an item while its state holds. Event sections list what happened after the baseline.
-STATE_SECTIONS = frozenset({Section.FAILED, Section.RENOVATE})
+STATE_SECTIONS = frozenset({Section.SECURITY, Section.FAILED, Section.RENOVATE})
 _WAITING_TAGS = frozenset({Tag.REVIEW_REQUIRED, Tag.NO_AUTOMERGE, Tag.BLOCKED, Tag.BEHIND})
 _BROKEN_TAGS = frozenset({Tag.CHECKS_FAILURE, Tag.CONFLICT})
 

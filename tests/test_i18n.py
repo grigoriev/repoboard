@@ -26,7 +26,12 @@ def test_catalogs_have_same_keys_and_placeholders(language: str) -> None:
 
 def test_every_enum_has_a_label() -> None:
     keys = catalog("en").keys()
-    expected = {f"tag.{t}" for t in Tag} | {f"kind.{k}" for k in Kind} | {f"section.{s}" for s in Section}
+    expected = (
+        {f"tag.{t}" for t in Tag}
+        | {f"kind.{k}" for k in Kind}
+        | {f"group.{k}" for k in Kind}
+        | {f"section.{s}" for s in Section}
+    )
     assert expected <= keys
     assert set(LANGUAGE_NAMES) == set(LANGUAGES)
 

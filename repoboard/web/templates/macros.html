@@ -1,0 +1,46 @@
+{% macro pills(t, item) -%}
+<span class="pills">
+  {%- if not item.open %}<span class="pill closed">{{ t("tag.closed") }}</span>{% endif -%}
+  {%- for tag in item.tags %}
+  <span class="pill {{ {'checks_failure': 'bad', 'conflict': 'bad', 'critical': 'bad', 'high': 'bad', 'secret': 'bad',
+    'review_required': 'warn', 'no_automerge': 'warn', 'blocked': 'warn', 'behind': 'warn', 'medium': 'warn',
+    'checks_pending': 'muted', 'draft': 'muted', 'low': 'muted', 'answered': 'ok'}.get(tag.value, 'muted') }}">{{ t("tag." ~ tag.value) }}</span>
+  {%- endfor %}
+</span>
+{%- endmacro %}
+
+{% macro item_row(t, age, ref, short_repo, item, entry=None, show_repo=True, actions=True, snooze_days=()) -%}
+<tr data-key="{{ item.key }}">
+  {% if show_repo %}<td class="repo {{ 'unread' if entry and entry.unseen }}" title="{{ item.repo }}"><a href="/repo/{{ item.repo }}">{{ short_repo(item.repo) }}</a></td>{% endif %}
+  <td class="num {{ 'unread' if not show_repo and entry and entry.unseen }}">{{ ref(item) }}</td>
+  <td class="title">
+    <a href="{{ item.url }}" target="_blank" rel="noopener">{{ item.title }}</a>
+    {%- if entry and entry.section.value == 'replies' and item.activity_by %}<span class="by">{{ t("reply.by", login=item.activity_by) }}</span>{% endif %}
+  </td>
+  <td>{{ pills(t, item) }}</td>
+  <td class="age">{{ age(entry.marker if entry else item.updated_at) }}</td>
+  {% if actions %}
+  <td class="act">
+    {% if entry %}
+    {% if entry.unseen %}
+    <button type="button" hx-post="/items/seen" hx-vals='{"key": {{ item.key | tojson }}}' hx-target="closest tr" hx-swap="delete swap:300ms">{{ t("action.seen") }}</button>
+    {% endif %}
+    {% if entry.snoozed_until %}
+    <button type="button" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "0"}' hx-on::after-request="location.reload()">{{ t("action.unsnooze") }}</button>
+    {% else %}
+    {% for days in snooze_days %}
+    <button type="button" hx-post="/items/snooze" hx-vals='{"key": {{ item.key | tojson }}, "days": "{{ days }}"}' hx-target="closest tr" hx-swap="delete swap:300ms">{{ t("action.snooze_day" if days == 1 else "action.snooze_week") }}</button>
+    {% endfor %}
+    {% endif %}
+    {% endif %}
+  </td>
+  {% endif %}
+</tr>
+{%- endmacro %}
+
+{% macro org_chips(t, owners, org, base) -%}
+<nav class="chips">
+  <a class="chip {{ 'active' if not org }}" href="{{ base }}">{{ t("filter.all") }}</a>
+  {% for owner in owners %}<a class="chip {{ 'active' if org == owner }}" href="{{ base }}?org={{ owner | urlencode }}">{{ owner }}</a>{% endfor %}
+</nav>
+{%- endmacro %}
