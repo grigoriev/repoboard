@@ -122,9 +122,13 @@ EDITS = threading.Lock()
 
 
 def apply(web: Web, edit: Callable[[Config], Config]) -> Config:
-    """Edit the config, save it and hand it to the poller, which lists the owners again on its next poll."""
+    """Edit the config, save it and hand it to the poller, which lists the owners again on its next poll.
+
+    The edit starts from the file: the user may have changed it, or run `repoboard watch`, since the start.
+    """
     with EDITS:
-        updated = edit(web.poller.config)
+        path = config.config_path()
+        updated = edit(config.load(path) if path.exists() else web.poller.config)
         config.save(updated)
         web.poller.config = updated
     web.poller.refresh()

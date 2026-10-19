@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import threading
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -268,3 +269,15 @@ def test_edits_at_the_same_time_keep_each_other(poller: Poller, config_file: Pat
     apply(web, slow_watch)
     second.join(timeout=5)
     assert {"https://github.com/cli/cli/issues/2", "https://github.com/cli/cli/issues/3"} <= set(poller.config.items)
+
+
+def test_edits_build_on_the_config_file(client: TestClient, poller: Poller, config_file: Path) -> None:
+    # The user changed the port in the file and watched an item from the command line while the app ran.
+    edited = config.watch(copy.replace(poller.config, port=9999), "https://github.com/cli/cli/issues/7")
+    config.save(edited, config_file)
+    client.post("/items/watch", data={"url": "https://github.com/cli/cli/issues/8"})
+    saved = config.load(config_file)
+    assert saved.port == 9999
+    assert {"https://github.com/cli/cli/issues/7", "https://github.com/cli/cli/issues/8"} <= set(saved.items)
+    client.post("/settings", data={"repos": "cli/cli", "language": "en"})
+    assert config.load(config_file).port == 9999
