@@ -263,3 +263,15 @@ def test_in_app_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
     assert macos.in_app_bundle()
     monkeypatch.setattr(sys, "platform", "linux")
     assert not macos.in_app_bundle()
+
+
+def test_app_path_adds_homebrew(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from repoboard import macos
+
+    brew = tmp_path / "brew"
+    brew.mkdir()
+    missing = tmp_path / "missing"
+    monkeypatch.setattr(macos, "TOOL_DIRS", (str(brew), str(missing)))
+    assert macos.app_path("/usr/bin:/bin") == f"{brew}:/usr/bin:/bin"
+    assert macos.app_path(f"/usr/bin:{brew}") == f"/usr/bin:{brew}"
+    assert macos.app_path("") == str(brew)

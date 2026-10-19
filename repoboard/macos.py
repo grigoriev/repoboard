@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import sys
 from importlib import resources
 
@@ -92,3 +93,14 @@ def set_open_at_login(enabled: bool) -> None:  # pragma: no cover - needs Servic
     if not ok:
         # Registration can fail, or wait for approval in System Settings > General > Login Items.
         log.warning("open at login: %s (status %s)", error, service.status())
+
+
+# Where Homebrew puts gh and terminal-notifier. An app started by launchd gets a PATH without them.
+TOOL_DIRS = ("/opt/homebrew/bin", "/usr/local/bin")
+
+
+def app_path(current: str) -> str:
+    """PATH with the tool directories in front, for an app started from Finder, the Dock or at login."""
+    parts = [part for part in current.split(os.pathsep) if part]
+    missing = [directory for directory in TOOL_DIRS if os.path.isdir(directory) and directory not in parts]
+    return os.pathsep.join([*missing, *parts])
