@@ -102,8 +102,9 @@ def test_form_to_config_drops_removed_owners() -> None:
     ],
 )
 def test_form_to_config_rejects(form: dict[str, list[str]]) -> None:
+    empty = Config()
     with pytest.raises(config.ConfigError):
-        form_to_config(form, Config())
+        form_to_config(form, empty)
 
 
 def test_settings_page_shows_the_config(client: TestClient) -> None:
@@ -165,3 +166,27 @@ def test_watch_and_unwatch_buttons(client: TestClient, poller: Poller, config_fi
     client.post("/items/unwatch", data={"url": url})
     assert url not in poller.config.items
     assert client.post("/items/watch", data={"url": "nope"}).status_code == 400
+
+
+def test_settings_page_is_left_out_of_the_live_reload(client: TestClient) -> None:
+    assert "repoboard-updated" not in client.get("/settings").text.split("<main", 1)[1].split(">", 1)[0]
+    assert 'hx-trigger="repoboard-updated from:body"' in client.get("/").text
+
+
+def test_scanner_names_with_spaces_survive_a_save() -> None:
+    cfg = form_to_config({"hidden_alert_tools": ["Semgrep OSS, Scorecard\nCodeQL"]}, Config())
+    assert cfg.hidden_alert_tools == ("Semgrep OSS", "Scorecard", "CodeQL")
+
+
+def test_the_language_field_wins_over_the_header_switcher(client: TestClient, poller: Poller) -> None:
+    client.post("/language", data={"language": "de"})
+    assert 'value="de" selected' in client.get("/settings").text
+    client.post("/settings", data={"owner_name": "acme", "language": "ru"})
+    assert "Обзор" in client.get("/").text
+
+
+def test_errors_are_translated(client: TestClient) -> None:
+    client.post("/language", data={"language": "de"})
+    page = client.post("/settings", data={"poll_interval_minutes": "often"}).text
+    assert "Nicht gespeichert" in page
+    assert "ganze Zahlen" in page

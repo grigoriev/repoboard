@@ -134,5 +134,7 @@
   "type.public": "публичные",
   "action.watch": "Отслеживать",
   "action.unwatch": "Не отслеживать",
-  "tray.settings": "Настройки…"
+  "tray.settings": "Настройки…",
+  "settings.not_saved": "Не сохранено: {error}",
+  "settings.whole_numbers": "интервал опроса и глубина поиска должны быть целыми числами"
 }

@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{# A live reload would replace the form and drop unsaved edits. #}
+{% block live %}{% endblock %}
 {% block main %}
 <form class="settings" method="post" action="/settings">
   {% if saved %}<p class="note ok">{{ t("settings.saved") }}</p>{% endif %}
@@ -17,13 +19,13 @@
         <input name="owner_include" value="{{ owner.include | join(' ') if owner else '' }}" placeholder="ch.sbb.* *polarion*"></label>
       <label>{{ t("settings.exclude") }}
         <input name="owner_exclude" value="{{ owner.exclude | join(' ') if owner else '' }}" placeholder="articles *-old"></label>
-      <div class="types" role="group" aria-label="{{ t('settings.leave_out') }}">
-        <span class="label">{{ t("settings.leave_out") }}</span>
+      <fieldset class="types">
+        <legend class="label">{{ t("settings.leave_out") }}</legend>
         {% for kind in repo_types %}
         <label class="check"><input type="checkbox" name="owner_types_{{ index }}" value="{{ kind }}"
           {{ 'checked' if (owner and kind in owner.exclude_types) or (not owner and kind in ('archived', 'fork')) }}> {{ t("type." ~ kind) }}</label>
         {% endfor %}
-      </div>
+      </fieldset>
       <div class="owner-actions">
         <button type="button" class="btn" hx-get="/settings/preview" hx-include="#owner-{{ index }}" hx-target="#preview-{{ index }}"
           hx-vals='js:{owner: document.querySelector("#owner-{{ index }} [name=owner_name]").value, include: document.querySelector("#owner-{{ index }} [name=owner_include]").value, exclude: document.querySelector("#owner-{{ index }} [name=owner_exclude]").value, types: Array.from(document.querySelectorAll("#owner-{{ index }} [name=owner_types_{{ index }}]:checked")).map(function (box) { return box.value; }).join(" ")}'>{{ t("settings.preview") }}</button>
@@ -51,7 +53,7 @@
   <section class="panel general">
     <h2>{{ t("settings.general") }}</h2>
     <label>{{ t("settings.language") }}
-      <select name="language">{% for code, name in languages %}<option value="{{ code }}" {{ 'selected' if code == cfg.language }}>{{ name }}</option>{% endfor %}</select></label>
+      <select name="language">{% for code, name in languages %}<option value="{{ code }}" {{ 'selected' if code == language }}>{{ name }}</option>{% endfor %}</select></label>
     <label>{{ t("settings.poll_interval") }} <input name="poll_interval_minutes" type="number" min="1" value="{{ cfg.poll_interval_minutes }}"></label>
     <label>{{ t("settings.lookback") }} <input name="lookback_days" type="number" min="1" value="{{ cfg.lookback_days }}"></label>
     <label>{{ t("settings.hidden_tools") }} <input name="hidden_alert_tools" value="{{ cfg.hidden_alert_tools | join(', ') }}"></label>

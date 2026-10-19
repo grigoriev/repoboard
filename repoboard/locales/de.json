@@ -134,5 +134,7 @@
   "type.public": "öffentlich",
   "action.watch": "Beobachten",
   "action.unwatch": "Nicht mehr beobachten",
-  "tray.settings": "Einstellungen…"
+  "tray.settings": "Einstellungen…",
+  "settings.not_saved": "Nicht gespeichert: {error}",
+  "settings.whole_numbers": "Abfrageintervall und Suchtiefe müssen ganze Zahlen sein"
 }

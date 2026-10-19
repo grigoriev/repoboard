@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 Form = dict[str, list[str]]
 UPDATED = {"HX-Trigger": "repoboard-updated"}
 _SEPARATORS = re.compile(r"[\s,]+")
+_LIST_SEPARATORS = re.compile(r"[,\n]+")  # for names that may hold a space, such as "Semgrep OSS"
+WHOLE_NUMBERS = "settings.whole_numbers"  # a catalog key: the page translates this error
 
 
 def words(text: str) -> tuple[str, ...]:
@@ -55,7 +57,7 @@ def form_to_config(form: Form, current: Config) -> Config:
         poll = int(one("poll_interval_minutes", str(current.poll_interval_minutes)))
         lookback = int(one("lookback_days", str(current.lookback_days)))
     except ValueError as exc:
-        raise ConfigError("poll interval and lookback must be whole numbers") from exc
+        raise ConfigError(WHOLE_NUMBERS) from exc
     parsed = config.parse(
         {
             "repos": list(words(one("repos"))),
@@ -64,7 +66,9 @@ def form_to_config(form: Form, current: Config) -> Config:
             "language": one("language", current.language),
             "poll_interval_minutes": poll,
             "lookback_days": lookback,
-            "hidden_alert_tools": list(words(one("hidden_alert_tools"))),
+            "hidden_alert_tools": [
+                tool.strip() for tool in _LIST_SEPARATORS.split(one("hidden_alert_tools")) if tool.strip()
+            ],
         }
     )
     return copy.replace(parsed, port=current.port, database=current.database)
@@ -107,8 +111,12 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
         try:
             updated = form_to_config(form, web.poller.config)
         except ConfigError as exc:
-            return page(request, web.poller.config, error=str(exc), status=400)
+            t = web.translator()
+            reason = t(str(exc)) if str(exc) == WHOLE_NUMBERS else str(exc)
+            return page(request, web.poller.config, error=t("settings.not_saved", error=reason), status=400)
         apply(web, updated)
+        # The page sets the language, so the choice of the header switcher must not override it.
+        web.store.set_setting("language", updated.language)
         return RedirectResponse("/settings?saved=1", status_code=303)
 
     @app.get("/settings/preview", response_class=HTMLResponse)
@@ -126,13 +134,13 @@ def add_settings_page(app: FastAPI, web: Web) -> None:
 
     @app.post("/items/watch")
     async def watch(request: Request) -> Response:
-        return change(request, config.watch, (await read_multi_form(request)).get("url", [""])[0])
+        return change(config.watch, (await read_multi_form(request)).get("url", [""])[0])
 
     @app.post("/items/unwatch")
     async def unwatch(request: Request) -> Response:
-        return change(request, config.unwatch, (await read_multi_form(request)).get("url", [""])[0])
+        return change(config.unwatch, (await read_multi_form(request)).get("url", [""])[0])
 
-    def change(request: Request, edit: Callable[[Config, str], Config], url: str) -> Response:
+    def change(edit: Callable[[Config, str], Config], url: str) -> Response:
         try:
             updated = edit(web.poller.config, url)
         except ConfigError as exc:

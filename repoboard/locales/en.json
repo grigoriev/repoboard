@@ -134,5 +134,7 @@
   "type.public": "public",
   "action.watch": "Watch",
   "action.unwatch": "Stop watching",
-  "tray.settings": "Settings…"
+  "tray.settings": "Settings…",
+  "settings.not_saved": "Not saved: {error}",
+  "settings.whole_numbers": "the poll interval and the lookback must be whole numbers"
 }

@@ -123,7 +123,8 @@ h2 { font-size: 15px; margin: 0; padding: 10px 14px; border-bottom: 1px solid va
   padding: 12px 14px; border: 0; border-top: 1px solid var(--line); }
 .owner label, .general label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .owner .types, .owner .owner-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
-.owner .types .label { font-size: 12px; color: var(--muted); }
+.owner .types { border: 0; margin: 0; padding: 0; }
+.owner .types .label { font-size: 12px; color: var(--muted); float: left; padding: 0; margin-right: 6px; }
 .owner label.check, .owner .types label.check { flex-direction: row; align-items: center; gap: 4px; color: var(--fg); }
 .owner .preview { grid-column: 1 / -1; }
 .preview-list { columns: 3 240px; margin: 4px 0 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; }
