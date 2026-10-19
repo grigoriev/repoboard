@@ -119,14 +119,14 @@ h2 { font-size: 15px; margin: 0; padding: 10px 14px; border-bottom: 1px solid va
   background: var(--surface-2); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
 .settings input:not([type=checkbox]), .settings select { font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px;
   border: 1px solid var(--line); background: var(--surface-2); color: var(--fg); }
-.owner { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; margin: 0;
+fieldset.owner { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 16px; margin: 0;
   padding: 12px 14px; border: 0; border-top: 1px solid var(--line); }
-.owner label, .general label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-.owner .types, .owner .owner-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
-.owner .types { border: 0; margin: 0; padding: 0; }
-.owner .types .label { font-size: 12px; color: var(--muted); float: left; padding: 0; margin-right: 6px; }
-.owner label.check, .owner .types label.check { flex-direction: row; align-items: center; gap: 4px; color: var(--fg); }
-.owner .preview { grid-column: 1 / -1; }
+fieldset.owner label, .general label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+fieldset.owner .types, fieldset.owner .owner-actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+fieldset.owner .types { border: 0; margin: 0; padding: 0; }
+fieldset.owner .types .label { font-size: 12px; color: var(--muted); float: left; padding: 0; margin-right: 6px; }
+fieldset.owner label.check, fieldset.owner .types label.check { flex-direction: row; align-items: center; gap: 4px; color: var(--fg); }
+fieldset.owner .preview { grid-column: 1 / -1; }
 .preview-list { columns: 3 240px; margin: 4px 0 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; }
 .general { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 16px; padding-bottom: 14px; }
 .general h2, .general .note { grid-column: 1 / -1; }
