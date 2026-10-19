@@ -36,8 +36,9 @@ def dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_a_change_in_one_channel_fails(dirs: Path) -> None:
     (dirs / "snapshots").mkdir()
     (dirs / "snapshots" / "v.png").write_bytes(png((100, 100, 100)))
+    changed = png((100, 100, 100), dot=(100, 100, 220))
     with pytest.raises(AssertionError, match="3 pixels changed"):
-        snapshot.assert_matches("v", png((100, 100, 100), dot=(100, 100, 220)))
+        snapshot.assert_matches("v", changed)
     assert (dirs / "output" / "v.actual.png").exists()
     assert (dirs / "output" / "v.diff.png").exists()
 
@@ -51,13 +52,15 @@ def test_small_noise_passes(dirs: Path) -> None:
 def test_a_size_change_fails(dirs: Path) -> None:
     (dirs / "snapshots").mkdir()
     (dirs / "snapshots" / "v.png").write_bytes(png((0, 0, 0)))
+    wider = png((0, 0, 0), size=(41, 30))
     with pytest.raises(AssertionError, match="size"):
-        snapshot.assert_matches("v", png((0, 0, 0), size=(41, 30)))
+        snapshot.assert_matches("v", wider)
 
 
 def test_a_missing_baseline_fails_and_lands_in_output(dirs: Path) -> None:
+    new = png((1, 2, 3))
     with pytest.raises(AssertionError, match="did not exist"):
-        snapshot.assert_matches("new", png((1, 2, 3)))
+        snapshot.assert_matches("new", new)
     assert (dirs / "snapshots" / "new.png").exists()
     assert (dirs / "output" / "new.actual.png").exists()
 
