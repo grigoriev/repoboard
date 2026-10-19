@@ -139,6 +139,7 @@ def test_first_poll_stays_silent_until_a_repository_was_read(store: Store) -> No
     poller, runner = make_poller(store, routes, Clock())
     assert poller.poll() == []
     assert store.get_setting("notified_once") is None
+    poller.listeners.append(lambda entries: None)
     runner.routes["issue list"] = issues("2026-10-19T08:00:00Z")
     assert poller.poll() == []
     assert store.get_setting("notified_once") is not None
@@ -148,3 +149,11 @@ def test_no_repositories_keeps_the_first_poll_silent(store: Store) -> None:
     poller = Poller(Config(), store, Gh(FakeGhRunner({"api user": {"login": "me"}})), Clock())
     poller.poll()
     assert store.get_setting("notified_once") is None
+
+
+def test_poll_without_listeners_leaves_notifications_to_the_tray(store: Store) -> None:
+    routes = {**empty_repo_routes(), "issue list": issues("2026-10-19T08:00:00Z")}
+    poller, _ = make_poller(store, routes, Clock())
+    poller.poll()
+    assert store.get_setting("notified_once") is None
+    assert len(store.take_notifications(NOW)) == 1

@@ -75,6 +75,8 @@ class Poller:
         self.store.forget_repos_except(self.config.repos)
         self.store.set_setting("last_poll", now.isoformat())
         self.last_error = None
+        if not self.listeners:
+            return []  # leave the notifications to a process that delivers them, such as the tray
         fresh = self.store.take_notifications(now, silent=first_run)
         if any(snapshot.error is None for snapshot in snapshots):
             self.store.set_setting("notified_once", now.isoformat())
