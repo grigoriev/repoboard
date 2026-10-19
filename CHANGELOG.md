@@ -9,3 +9,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Project scaffold: uv, ruff, mypy, pytest.
+- TOML config with the repositories, language and poll interval, and an import from the Alfred
+  GitHub workflow list.
