@@ -20,9 +20,12 @@ classifiers = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "desktop-notifier>=6.2.0",
     "fastapi>=0.146.0",
     "jinja2>=3.1.6",
     "markupsafe>=3.0.4",
+    "pywebview>=6.2.1",
+    "rumps>=0.4.0 ; sys_platform == 'darwin'",
     "uvicorn>=0.54.0",
 ]
 
@@ -83,3 +86,7 @@ python_version = "3.14"
 strict = true
 warn_unused_configs = true
 show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["rumps", "webview", "desktop_notifier"]
+ignore_missing_imports = true

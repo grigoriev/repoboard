@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import socket
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from repoboard import __version__, config
-from repoboard.cli import main
+from repoboard.cli import main, port_free
 from repoboard.gh import Gh, GhError
 from tests.fakes import FakeGhRunner, empty_repo_routes
 
@@ -25,9 +26,29 @@ def test_version(capsys: pytest.CaptureFixture[str]) -> None:
     assert __version__ in capsys.readouterr().out
 
 
-def test_no_command_prints_help(config_file: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_no_command_prints_help_off_macos(
+    config_file: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("sys.platform", "linux")
     assert main([]) == 0
     assert "serve" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(("argv", "platform"), [([], "darwin"), (["tray"], "linux")])
+def test_tray_is_the_default_on_macos(
+    config_file: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str], platform: str
+) -> None:
+    monkeypatch.setattr("sys.platform", platform)
+    monkeypatch.setattr("repoboard.cli.tray", lambda cfg: 7)
+    assert main(argv) == 7
+
+
+def test_port_free() -> None:
+    with socket.socket() as busy:
+        busy.bind(("127.0.0.1", 0))
+        busy.listen()
+        assert not port_free(busy.getsockname()[1])
+    assert port_free(0)
 
 
 def test_invalid_config(config_file: Path, capsys: pytest.CaptureFixture[str]) -> None:

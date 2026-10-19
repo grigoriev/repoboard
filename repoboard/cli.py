@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import socket
 import sys
 import webbrowser
 from collections.abc import Sequence
@@ -19,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="repoboard", description="Daily overview of your GitHub repositories.")
     parser.add_argument("--version", action="version", version=f"repoboard {__version__}")
     commands = parser.add_subparsers(dest="command")
+    commands.add_parser("tray", help="run in the menu bar with notifications (the default on macOS)")
     serve = commands.add_parser("serve", help="poll in the background and serve the web UI")
     serve.add_argument("--no-browser", action="store_true", help="do not open the browser")
     commands.add_parser("poll", help="poll once and print the inbox counts")
@@ -40,6 +42,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return poll_once(cfg)
     if args.command == "serve":
         return serve(cfg, open_browser=not args.no_browser)
+    if args.command == "tray" or (args.command is None and sys.platform == "darwin"):
+        return tray(cfg)
     build_parser().print_help()
     return 0
 
@@ -68,11 +72,23 @@ def poll_once(cfg: config.Config) -> int:
         store.close()
 
 
+def port_free(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+    return True
+
+
 def serve(cfg: config.Config, open_browser: bool) -> int:  # pragma: no cover - runs a server until interrupted
     import uvicorn
 
     from repoboard.web.app import create_app
 
+    if not port_free(cfg.port):
+        print(f"repoboard: port {cfg.port} is busy. Is Repoboard already running?", file=sys.stderr)
+        return 1
     store = Store(cfg.database)
     poller = Poller(cfg, store, Gh())
     poller.start()
@@ -84,4 +100,41 @@ def serve(cfg: config.Config, open_browser: bool) -> int:  # pragma: no cover - 
     finally:
         poller.stop()
         store.close()
+    return 0
+
+
+def tray(cfg: config.Config) -> int:  # pragma: no cover - needs the macOS menu bar
+    import threading
+
+    import uvicorn
+
+    from repoboard.i18n import Translator
+    from repoboard.notify import NotificationListener, default_notifier
+    from repoboard.tray import run_tray
+    from repoboard.web.app import create_app
+    from repoboard.window import Window
+
+    if not port_free(cfg.port):
+        print(f"repoboard: port {cfg.port} is busy. Is Repoboard already running?", file=sys.stderr)
+        return 1
+    store = Store(cfg.database)
+    poller = Poller(cfg, store, Gh())
+    url = f"http://127.0.0.1:{cfg.port}/"
+
+    def translator() -> Translator:
+        return Translator(store.get_setting("language") or cfg.language)
+
+    poller.listeners.append(NotificationListener(default_notifier(), translator, url))
+    server = uvicorn.Server(uvicorn.Config(create_app(poller), host="127.0.0.1", port=cfg.port, log_level="warning"))
+    threading.Thread(target=server.run, name="repoboard-web", daemon=True).start()
+    poller.start()
+    window = Window(url)
+
+    def quit_app() -> None:
+        poller.stop()
+        server.should_exit = True
+        window.close()
+
+    run_tray(poller, translator, window.open, quit_app)
+    store.close()
     return 0
