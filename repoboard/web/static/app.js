@@ -100,14 +100,14 @@
   document.body.addEventListener("htmx:beforeSwap", function (event) {
     var active = document.activeElement;
     saved = null;
-    if (event.detail.target.id !== "content" || !active || !active.dataset || !active.dataset.action) return;
+    if (event.detail.target.id !== "content" || !active?.dataset?.action) return;
     saved = { key: active.dataset.key, action: active.dataset.action, index: controls(active.dataset.action).indexOf(active) };
   });
 
   document.body.addEventListener("htmx:afterSettle", function () {
     if (!saved) return;
     var same = controls(saved.action);
-    var match = same.filter(function (element) { return element.dataset.key === saved.key; })[0];
+    var match = same.find(function (element) { return element.dataset.key === saved.key; });
     var target = match || same[Math.min(saved.index, same.length - 1)];
     saved = null;
     if (target) target.focus();
