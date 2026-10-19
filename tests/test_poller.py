@@ -512,3 +512,10 @@ def test_a_watched_link_that_fails_once_keeps_its_state(store: Store) -> None:
     poller.poll()
     assert [i.number for i in store.items()] == ["7"]
     assert poller.watched_errors() == {"https://github.com/cli/cli/issues/7": "Bad Gateway"}
+
+
+def test_the_poll_interval_follows_the_config(store: Store) -> None:
+    poller = Poller(Config(poll_interval_minutes=10), store, Gh(FakeGhRunner({})), Clock())
+    assert poller.next_full_poll(100.0) == 700.0
+    poller.config = Config(poll_interval_minutes=1)
+    assert poller.next_full_poll(100.0) == 160.0

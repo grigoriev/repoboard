@@ -251,8 +251,11 @@ class Poller:
         self._stop.set()
         self._wake.set()
 
+    def next_full_poll(self, now_monotonic: float) -> float:
+        """When the next full poll is due. Read each time, so a changed interval applies at once."""
+        return now_monotonic + self.config.poll_interval_minutes * 60
+
     def _run(self) -> None:
-        interval = self.config.poll_interval_minutes * 60
         next_full = time.monotonic()
         while not self._stop.is_set():
             self._wake.clear()  # before the work: a wake during the work then ends the wait below at once
@@ -260,7 +263,7 @@ class Poller:
                 full, self._full_requested = self._full_requested or time.monotonic() >= next_full, False
             if full:
                 self.poll()
-                next_full = time.monotonic() + interval
+                next_full = self.next_full_poll(time.monotonic())
             elif repos := self.take_pending():
                 self.poll(repos)
             follow_up = self.seconds_to_follow_up()
