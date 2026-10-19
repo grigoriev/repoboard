@@ -132,3 +132,19 @@ def test_unexpected_error_keeps_the_poller_alive(store: Store, caplog: pytest.Lo
     assert poller.last_error == "listener broke"
     assert poller.polling is False
     assert "poll failed" in caplog.text
+
+
+def test_first_poll_stays_silent_until_a_repository_was_read(store: Store) -> None:
+    routes = {**empty_repo_routes(), "issue list": GhError("timeout", 504)}
+    poller, runner = make_poller(store, routes, Clock())
+    assert poller.poll() == []
+    assert store.get_setting("notified_once") is None
+    runner.routes["issue list"] = issues("2026-10-19T08:00:00Z")
+    assert poller.poll() == []
+    assert store.get_setting("notified_once") is not None
+
+
+def test_no_repositories_ends_the_silent_first_poll(store: Store) -> None:
+    poller = Poller(Config(), store, Gh(FakeGhRunner({"api user": {"login": "me"}})), Clock())
+    poller.poll()
+    assert store.get_setting("notified_once") is not None
