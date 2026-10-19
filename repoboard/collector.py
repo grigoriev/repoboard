@@ -109,7 +109,8 @@ class Collector:
         recent = self.gh.json(
             [
                 "issue", "list", "-R", repo, "--state", "all", "--limit", RECENT_LIMIT,
-                "--search", f"updated:>={since.date().isoformat()}", "--json", f"{ISSUE_FIELDS},comments",
+                "--search", f"updated:>={since.date().isoformat()} sort:updated-desc",
+                "--json", f"{ISSUE_FIELDS},comments",
             ]
         )  # fmt: skip
         by_number: dict[int, dict[str, Any]] = {node["number"]: node for node in open_issues}

@@ -64,7 +64,7 @@ def test_issues_merge_open_and_recent_with_comments() -> None:
     def issues(args: list[str]) -> list[dict[str, Any]]:
         if "open" in args:
             return [issue(1), issue(2, author="me")]
-        assert "updated:>=2026-10-01" in args
+        assert "updated:>=2026-10-01 sort:updated-desc" in args
         closed = issue(3, author="me", state="CLOSED", comments=[comment("bob", "2026-10-03T08:00:00Z")])
         return [issue(2, author="me", comments=[comment("me", "2026-10-02T09:00:00Z")]), closed]
 
