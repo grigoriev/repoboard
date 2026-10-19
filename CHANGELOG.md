@@ -38,3 +38,6 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Column widths are relative, so large text keeps room for the title.
 - `hidden_alert_tools` in the config leaves out the alerts of chosen code scanning tools. Scorecard
   is hidden by default.
+- Keyboard focus survives live updates. After "Seen" it moves to the same button of the next row.
+- The menu bar asks the window to close instead of killing it, so the window keeps its size. A
+  window whose menu bar process is gone closes as well.

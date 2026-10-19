@@ -10,6 +10,7 @@ import threading
 import urllib.request
 import webbrowser
 from collections.abc import Callable, Sequence
+from typing import BinaryIO
 from urllib.parse import urljoin
 
 WIDTH, HEIGHT = 1200, 820
@@ -17,24 +18,66 @@ SAVE_DELAY_SECONDS = 0.5
 Geometry = dict[str, int]
 
 
+CLOSE_TIMEOUT_SECONDS = 3
+
+
 class Window:
-    """Runs the window in a child process: pywebview and the menu bar both need the main thread."""
+    """Runs the window in a child process: pywebview and the menu bar both need the main thread.
+
+    The parent talks to the child through its stdin: "focus" brings the window forward, "close" closes
+    it the normal way, so the window still saves its size. A closed stdin closes the window too.
+    """
 
     def __init__(self, url: str) -> None:
         self.url = url
         self._process: subprocess.Popen[bytes] | None = None
 
     def open(self) -> None:
-        if self._process and self._process.poll() is None:
-            self._process.terminate()  # reopening brings the window to the front
+        if self._alive() and self._send(b"focus"):
+            return
+        self._stop()
         try:
-            self._process = subprocess.Popen([sys.executable, "-m", "repoboard.window", self.url])
+            self._process = subprocess.Popen(
+                [sys.executable, "-m", "repoboard.window", self.url], stdin=subprocess.PIPE
+            )
         except OSError:
             webbrowser.open(self.url)
 
     def close(self) -> None:
-        if self._process and self._process.poll() is None:
+        if self._alive():
+            self._send(b"close")
+            self._stop()
+
+    def _alive(self) -> bool:
+        return self._process is not None and self._process.poll() is None
+
+    def _send(self, command: bytes) -> bool:
+        assert self._process is not None and self._process.stdin is not None
+        try:
+            self._process.stdin.write(command + b"\n")
+            self._process.stdin.flush()
+        except OSError, ValueError:
+            return False
+        return True
+
+    def _stop(self) -> None:
+        """Wait for a window that was asked to close, and end it when it does not."""
+        if not self._alive():
+            return
+        assert self._process is not None
+        try:
+            self._process.wait(timeout=CLOSE_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
             self._process.terminate()
+
+
+def follow_commands(stream: BinaryIO, focus: Callable[[], object], close: Callable[[], object]) -> None:
+    """Run the parent's commands until "close" or the end of the stream, then close the window."""
+    for line in stream:
+        if line.strip() != b"focus":
+            break  # "close", or a command this version does not know
+        focus()
+    close()
 
 
 def load_geometry(base_url: str) -> Geometry:
@@ -119,6 +162,14 @@ def main(argv: Sequence[str] | None = None) -> None:  # pragma: no cover - opens
     )
     window.events.resized += saver.resized
     window.events.closing += saver.flush
+
+    def focus() -> None:
+        window.restore()
+        window.show()
+
+    threading.Thread(
+        target=follow_commands, args=(sys.stdin.buffer, focus, window.destroy), name="repoboard-commands", daemon=True
+    ).start()
     webview.start()
 
 
