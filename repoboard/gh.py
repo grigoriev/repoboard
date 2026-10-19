@@ -53,10 +53,11 @@ class Gh:
         pages = self.json(["api", "--paginate", "--slurp", endpoint]) or []
         return [entry for page in pages for entry in page]
 
-    def graphql(self, query: str, **variables: str) -> Any:
+    def graphql(self, query: str, **variables: str | int) -> Any:
         args = ["api", "graphql", "-f", f"query={query}"]
         for name, value in variables.items():
-            args += ["-f", f"{name}={value}"]  # -F would turn a numeric repo name into an integer
+            # -f keeps a numeric repo name a string; -F sends a real integer, as Int! variables need.
+            args += ["-F" if isinstance(value, int) else "-f", f"{name}={value}"]
         return self.json(args)
 
     def viewer_login(self) -> str:

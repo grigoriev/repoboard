@@ -386,3 +386,11 @@ def test_content_reloads_in_place(client: TestClient) -> None:
     page = client.get("/overview?org=o").text
     assert 'hx-get="/overview?org=o"' in page
     assert 'hx-trigger="repoboard-updated from:body"' in page
+
+
+def test_merged_item_shows_merged_not_closed(client: TestClient, poller: Poller) -> None:
+    poller.store.ensure_baseline(NOW)
+    poller.store.save_watched([item("5", Kind.PR, repo="cli/cli", open=False, tags=(Tag.MERGED,))], NOW)
+    page = client.get("/").text
+    assert ">merged<" in page
+    assert ">closed<" not in page

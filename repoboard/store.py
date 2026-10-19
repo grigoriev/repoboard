@@ -7,7 +7,7 @@ import sqlite3
 import threading
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS items (
     activity_at TEXT,
     activity_by TEXT,
     tags TEXT NOT NULL,
-    renovate INTEGER NOT NULL
+    renovate INTEGER NOT NULL,
+    watched INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS items_repo ON items(repo);
 CREATE TABLE IF NOT EXISTS repos (
@@ -103,6 +104,9 @@ class Store:
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
+        columns = {row["name"] for row in self._db.execute("PRAGMA table_info(items)")}
+        if "watched" not in columns:  # a database from before watched items
+            self._db.execute("ALTER TABLE items ADD COLUMN watched INTEGER NOT NULL DEFAULT 0")
 
     def close(self) -> None:
         self._db.close()
@@ -140,9 +144,11 @@ class Store:
         with self._tx() as db:
             for snapshot in snapshots:
                 if snapshot.error is None:
-                    db.execute("DELETE FROM items WHERE repo = ?", (snapshot.repo,))
+                    # Watched items have their own poll and stay. A repository item with the same key
+                    # replaces it below, and the watched poll that follows marks it watched again.
+                    db.execute("DELETE FROM items WHERE repo = ? AND watched = 0", (snapshot.repo,))
                     db.executemany(
-                        "INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         [self._item_row(item) for item in snapshot.items],
                     )
                     open_discussions, security = snapshot.open_discussions, json.dumps(snapshot.security)
@@ -157,11 +163,23 @@ class Store:
                     (snapshot.repo, now.isoformat(), snapshot.error, open_discussions, security),
                 )
 
+    def save_watched(self, items: Iterable[Item], now: datetime, repos: set[str] | None = None) -> None:
+        """Replace the watched items with the latest poll of them: all, or those of `repos`."""
+        with self._tx() as db:
+            if repos is None:
+                db.execute("DELETE FROM items WHERE watched = 1")
+            else:
+                db.executemany("DELETE FROM items WHERE watched = 1 AND repo = ?", [(repo,) for repo in repos])
+            db.executemany(
+                "INSERT OR REPLACE INTO items VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [self._item_row(replace(item, watched=True)) for item in items],
+            )
+
     def forget_repos_except(self, repos: Iterable[str]) -> None:
         keep = list(repos)
         marks = ",".join("?" * len(keep)) or "''"
         with self._tx() as db:
-            db.execute(f"DELETE FROM items WHERE repo NOT IN ({marks})", keep)
+            db.execute(f"DELETE FROM items WHERE repo NOT IN ({marks}) AND watched = 0", keep)
             db.execute(f"DELETE FROM repos WHERE repo NOT IN ({marks})", keep)
 
     @staticmethod
@@ -181,6 +199,7 @@ class Store:
             item.activity_by,
             ",".join(item.tags),
             int(item.renovate),
+            int(item.watched),
         )
 
     @staticmethod
@@ -202,6 +221,7 @@ class Store:
             activity_by=row["activity_by"],
             tags=tuple(Tag(t) for t in row["tags"].split(",") if t),
             renovate=bool(row["renovate"]),
+            watched=bool(row["watched"]),
         )
 
     def items(self, repo: str | None = None) -> list[Item]:

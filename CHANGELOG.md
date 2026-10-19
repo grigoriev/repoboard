@@ -48,3 +48,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `repoboard tray` runs in the Windows and Linux tray, with the unseen count as a badge on the icon.
 - `[[owners]]` in the config watches every repository of a user or organization, narrowed by
   name patterns and repository types. New repositories join within an hour and are announced.
+- Watch single pull requests, issues and discussions by their links, in any repository: `items` in
+  the config, or `repoboard watch <link>`. They have their own section and notify on every change.

@@ -11,6 +11,7 @@ from repoboard.models import Item, Kind, Tag
 class Section(StrEnum):
     """Inbox sections, in display order."""
 
+    WATCHED = "watched"
     SECURITY = "security"
     FAILED = "failed"
     RENOVATE = "renovate"
@@ -19,12 +20,14 @@ class Section(StrEnum):
 
 
 # State sections list an item while its state holds. Event sections list what happened after the baseline.
-STATE_SECTIONS = frozenset({Section.SECURITY, Section.FAILED, Section.RENOVATE})
+STATE_SECTIONS = frozenset({Section.WATCHED, Section.SECURITY, Section.FAILED, Section.RENOVATE})
 _WAITING_TAGS = frozenset({Tag.REVIEW_REQUIRED, Tag.NO_AUTOMERGE, Tag.BLOCKED, Tag.BEHIND})
 _BROKEN_TAGS = frozenset({Tag.CHECKS_FAILURE, Tag.CONFLICT})
 
 
 def classify(item: Item) -> Section | None:
+    if item.watched:
+        return Section.WATCHED  # any change counts: a reply, a merge, a failed check
     if item.kind is Kind.ALERT:
         return Section.SECURITY
     tags = set(item.tags)

@@ -430,3 +430,40 @@ def test_repositories_a_wider_filter_lets_in_are_not_news(store: Store) -> None:
     poller.poll()
     assert poller.repos() == ("acme/a", "acme/b")
     assert added == []
+
+
+def watched_routes() -> dict[str, Any]:
+    issue = {
+        "number": 7, "title": "Watched", "html_url": "https://github.com/cli/cli/issues/7", "user": {"login": "bob"},
+        "state": "open", "created_at": "2026-10-19T08:00:00Z", "updated_at": "2026-10-19T08:30:00Z",
+    }  # fmt: skip
+    return {
+        "repos/cli/cli/issues/7/comments": [[]],
+        "repos/cli/cli/issues/7": issue,
+        "repos/cli/cli/issues/8": GhError("gone", 404),
+    }
+
+
+def test_watched_items_are_polled(store: Store) -> None:
+    runner = FakeGhRunner({"api user": {"login": "me"}, **watched_routes(), **empty_repo_routes()})
+    cfg = Config(items=("https://github.com/cli/cli/issues/7", "https://github.com/cli/cli/issues/8"))
+    poller = Poller(cfg, store, Gh(runner), Clock())
+    poller.poll()
+    assert [i.key for i in store.items()] == ["cli/cli#issue#7"]
+    assert store.items()[0].watched
+    assert poller.watched_errors() == {"https://github.com/cli/cli/issues/8": "gone"}
+    assert [e.item.number for e in store.inbox(NOW)[Section.WATCHED]] == ["7"]
+
+
+def test_partial_poll_refreshes_watched_items_of_the_touched_repository(store: Store) -> None:
+    runner = FakeGhRunner({"api user": {"login": "me"}, **watched_routes(), **empty_repo_routes()})
+    poller = Poller(Config(items=("https://github.com/cli/cli/issues/7",)), store, Gh(runner), Clock())
+    poller.poll()
+    runner.calls.clear()
+    poller.poll(["cli/cli"])
+    assert any("repos/cli/cli/issues/7" in " ".join(call) for call in runner.calls)
+    assert [i.number for i in store.items()] == ["7"]
+    runner.calls.clear()
+    poller.poll(["other/repo"])
+    assert runner.calls == []
+    assert [i.number for i in store.items()] == ["7"]

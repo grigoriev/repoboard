@@ -25,6 +25,11 @@ repos = [
     "cli/cli",
 ]
 
+# Single pull requests, issues and discussions to watch, by their links, in any repository.
+items = [
+    "https://github.com/cli/cli/pull/12345",
+]
+
 # Every repository of a user or organization. New repositories join on their own; Repoboard
 # lists them again every hour. Patterns match the repository name, * and ? as wildcards.
 # exclude_types takes archived, fork, mirror, template, private and public; the default leaves

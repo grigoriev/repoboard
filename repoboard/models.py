@@ -20,6 +20,7 @@ class Tag(StrEnum):
     CHECKS_FAILURE = "checks_failure"
     CHECKS_PENDING = "checks_pending"
     CONFLICT = "conflict"
+    MERGED = "merged"
     DRAFT = "draft"
     REVIEW_REQUIRED = "review_required"
     NO_AUTOMERGE = "no_automerge"
@@ -64,6 +65,7 @@ class Item:
     activity_by: str | None = None
     tags: tuple[Tag, ...] = ()
     renovate: bool = False
+    watched: bool = False  # listed under items in the config, so it has its own section
 
     @property
     def key(self) -> str:

@@ -189,3 +189,54 @@ def test_mark_seen_of_an_unknown_key_uses_the_click_time(store: Store) -> None:
     store.mark_seen(["o/r#issue#404"], NOW)
     store.save_snapshots([RepoSnapshot("o/r", (item("404"),))], NOW)
     assert store.inbox(NOW)[Section.NEW] == []
+
+
+def test_watched_items_survive_their_repository_snapshot(store: Store) -> None:
+    watched = item("7", Kind.PR, repo="cli/cli", watched=True, tags=(Tag.MERGED,), open=False)
+    store.save_watched([watched], NOW)
+    store.save_snapshots([RepoSnapshot("cli/cli", (item("1", repo="cli/cli"),))], NOW)
+    assert {i.number: i.watched for i in store.items("cli/cli")} == {"1": False, "7": True}
+    store.save_watched([], NOW)
+    assert [i.number for i in store.items("cli/cli")] == ["1"]
+    assert [e.item.number for e in store.inbox(NOW)[Section.WATCHED]] == []
+
+
+def test_watched_item_in_a_watched_repository(store: Store) -> None:
+    store.save_snapshots([RepoSnapshot("o/r", (item("1"),))], NOW)
+    store.save_watched([item("1", watched=True)], NOW)
+    store.save_snapshots([RepoSnapshot("o/r", (item("1"),))], NOW)
+    store.save_watched([item("1", watched=True)], NOW)
+    (only,) = store.items("o/r")
+    assert only.watched
+    assert [e.section for e in store.entries(NOW)] == [Section.WATCHED]
+
+
+def test_old_database_gets_the_watched_column(tmp_path: Path) -> None:
+    import sqlite3
+
+    path = tmp_path / "old.sqlite3"
+    db = sqlite3.connect(path)
+    db.execute(
+        "CREATE TABLE items (key TEXT PRIMARY KEY, repo TEXT NOT NULL, kind TEXT NOT NULL, number TEXT NOT NULL,"
+        " title TEXT NOT NULL, url TEXT NOT NULL, author TEXT NOT NULL, open INTEGER NOT NULL,"
+        " created_at TEXT NOT NULL, updated_at TEXT NOT NULL, activity_at TEXT, activity_by TEXT,"
+        " tags TEXT NOT NULL, renovate INTEGER NOT NULL)"
+    )
+    db.commit()
+    db.close()
+    migrated = Store(path)
+    migrated.save_watched([item("1", watched=True)], NOW)
+    assert migrated.items()[0].watched
+    migrated.close()
+
+
+def test_forgetting_repositories_keeps_watched_items(store: Store) -> None:
+    store.save_watched([item("7", repo="cli/cli")], NOW)
+    store.forget_repos_except([])
+    assert [i.number for i in store.items()] == ["7"]
+
+
+def test_save_watched_of_some_repositories(store: Store) -> None:
+    store.save_watched([item("1", repo="a/a"), item("2", repo="b/b")], NOW)
+    store.save_watched([item("3", repo="a/a")], NOW, repos={"a/a"})
+    assert sorted(i.key for i in store.items()) == ["a/a#issue#3", "b/b#issue#2"]

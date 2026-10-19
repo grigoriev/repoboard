@@ -41,10 +41,39 @@ class Owner:
     exclude_types: tuple[str, ...] = ("archived", "fork")
 
 
+ITEM_URL = re.compile(
+    r"^(?:https?://)?(?:www\.)?github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/(pull|issues|discussions)/(\d+)(?:[/?#].*)?$"
+)
+ITEM_KINDS = {"pull": "pr", "issues": "issue", "discussions": "discussion"}
+
+
+@dataclass(frozen=True)
+class ItemRef:
+    """One pull request, issue or discussion to watch, wherever its repository is."""
+
+    repo: str
+    kind: str  # "pr", "issue" or "discussion", the values of models.Kind
+    number: str
+    path: str  # "pull", "issues" or "discussions"
+
+    @property
+    def url(self) -> str:
+        return f"https://github.com/{self.repo}/{self.path}/{self.number}"
+
+
+def parse_item_url(url: str) -> ItemRef:
+    match = ITEM_URL.match(url.strip())
+    if not match:
+        raise ConfigError(f"not a GitHub pull request, issue or discussion link: {url}")
+    repo, path, number = match.groups()
+    return ItemRef(repo, ITEM_KINDS[path], number, path)
+
+
 @dataclass(frozen=True)
 class Config:
     repos: tuple[str, ...] = ()
     owners: tuple[Owner, ...] = ()
+    items: tuple[str, ...] = ()  # canonical links of single pull requests, issues and discussions
     language: str = "en"
     poll_interval_minutes: int = 10
     lookback_days: int = 14
@@ -89,6 +118,7 @@ def parse(data: dict[str, object]) -> Config:
     return Config(
         repos=tuple(dict.fromkeys(repos)),
         owners=_owners(data.get("owners", [])),
+        items=_items(data.get("items", [])),
         language=str(language),
         poll_interval_minutes=_positive_int(data, "poll_interval_minutes", defaults.poll_interval_minutes),
         lookback_days=_positive_int(data, "lookback_days", defaults.lookback_days),
@@ -96,6 +126,12 @@ def parse(data: dict[str, object]) -> Config:
         database=Path(database).expanduser() if isinstance(database, str) else defaults.database,
         hidden_alert_tools=tuple(hidden),
     )
+
+
+def _items(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(url, str) for url in value):
+        raise ConfigError("items must be a list of GitHub links")
+    return tuple(dict.fromkeys(parse_item_url(url).url for url in value))
 
 
 def _strings(entry: dict[str, object], key: str, default: tuple[str, ...]) -> tuple[str, ...]:
@@ -149,7 +185,9 @@ def dump(config: Config) -> str:
         f"port = {config.port}\n"
         f"database = {json.dumps(str(config.database))}\n"
         f"hidden_alert_tools = {json.dumps(list(config.hidden_alert_tools))}\n"
-        f"repos = [\n{repos}]\n" + "".join(_dump_owner(owner) for owner in config.owners)
+        f"repos = [\n{repos}]\n"
+        f"items = [\n{''.join(f'    {json.dumps(url)},\n' for url in config.items)}]\n"
+        + "".join(_dump_owner(owner) for owner in config.owners)
     )
 
 
@@ -183,3 +221,12 @@ def read_alfred_repos(directory: Path = ALFRED_VISIBLE_DIR) -> list[str]:
 
 def with_repos(config: Config, repos: Iterable[str]) -> Config:
     return copy.replace(config, repos=tuple(dict.fromkeys([*config.repos, *repos])))
+
+
+def watch(config: Config, url: str) -> Config:
+    return copy.replace(config, items=tuple(dict.fromkeys([*config.items, parse_item_url(url).url])))
+
+
+def unwatch(config: Config, url: str) -> Config:
+    gone = parse_item_url(url).url
+    return copy.replace(config, items=tuple(item for item in config.items if item != gone))

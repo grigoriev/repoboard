@@ -57,3 +57,9 @@ def test_marker() -> None:
     assert marker(make(Kind.PR), Section.FAILED) == T3
     assert marker(make(Kind.ALERT), Section.SECURITY) == T3
     assert marker(make(activity_at=None), Section.NEW) == T3
+
+
+def test_watched_items_have_their_own_section() -> None:
+    assert classify(make(Kind.PR, watched=True, tags=(Tag.CHECKS_FAILURE,))) is Section.WATCHED
+    assert classify(make(watched=True, activity_at=None)) is Section.WATCHED
+    assert marker(make(watched=True, activity_at=T1), Section.WATCHED) == T3
