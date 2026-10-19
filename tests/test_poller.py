@@ -326,3 +326,22 @@ def test_single_repositories_in_another_case_are_not_polled_twice(store: Store) 
     poller = Poller(Config(repos=("Acme/Tool",), owners=(Owner("acme"),)), store, Gh(runner), Clock())
     poller.poll()
     assert poller.repos() == ("Acme/Tool",)
+
+
+def test_a_single_repository_handed_over_to_its_owner_stays(store: Store) -> None:
+    from repoboard.config import Owner
+
+    clock = Clock()
+    runner = FakeGhRunner(
+        {"api user": {"login": "me"}, "orgs/acme/repos": [[owner_repo("acme/tool")]], **empty_repo_routes()}
+    )
+    poller = Poller(Config(repos=("acme/tool",), owners=(Owner("acme"),)), store, Gh(runner), clock)
+    added: list[list[str]] = []
+    poller.repo_listeners.append(added.append)
+    poller.poll()
+    poller.config = Config(owners=(Owner("acme"),))
+    assert poller.repos() == ("acme/tool",)
+    clock.now = NOW + timedelta(hours=2)
+    poller.poll()
+    assert poller.repos() == ("acme/tool",)
+    assert added == []

@@ -84,7 +84,8 @@ class Poller:
         assert self._me is not None
         resolved = resolve(self.gh, self.config, self._me)
         single = {repo.lower() for repo in self.config.repos}
-        kept = {repo for repo in resolved.repos if repo.lower() not in single}
+        # Keep every listed repository, a single one too: if it leaves `repos`, the owner still covers it.
+        kept = set(resolved.listed)
         # An owner that could not be listed keeps what it had. Dropping it would delete its data now
         # and announce all of it as new once the listing works again.
         failed = {owner.lower() for owner in resolved.errors}
@@ -93,7 +94,8 @@ class Poller:
         listing = {"at": now.isoformat(), "owners": self._owners_key(), "repos": owned, "errors": resolved.errors}
         self.store.set_setting("discovered", json.dumps(listing))
         if "at" in saved:  # the first listing is the starting point, not news
-            added = sorted(set(owned) - set(saved.get("repos", [])), key=str.lower)
+            known = {repo.lower() for repo in saved.get("repos", [])} | single
+            added = [repo for repo in owned if repo.lower() not in known]
             for listener in self.repo_listeners if added else ():
                 listener(added)
 

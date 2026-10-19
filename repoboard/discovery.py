@@ -30,8 +30,9 @@ class RepoInfo:
 
 @dataclass(frozen=True)
 class Resolved:
-    repos: tuple[str, ...]
+    repos: tuple[str, ...]  # the owners' repositories and the single ones together
     errors: dict[str, str] = field(default_factory=dict)  # owner -> why it could not be listed
+    listed: tuple[str, ...] = ()  # only what the owners listed, a single repository included
 
 
 def matches(owner: Owner, info: RepoInfo) -> bool:
@@ -64,6 +65,7 @@ def resolve(gh: Gh, config: Config, viewer: str) -> Resolved:
     """The repositories to poll: the matching repositories of every owner, plus the single ones."""
     # GitHub names ignore case. Keyed by the lower case name, the spelling of the config wins.
     repos = {repo.lower(): repo for repo in config.repos}
+    listed_by_owners: dict[str, str] = {}
     errors: dict[str, str] = {}
     for owner in config.owners:
         try:
@@ -73,4 +75,7 @@ def resolve(gh: Gh, config: Config, viewer: str) -> Resolved:
             continue
         for name in listed:
             repos.setdefault(name.lower(), name)
-    return Resolved(tuple(sorted(repos.values(), key=str.lower)), errors)
+            listed_by_owners.setdefault(name.lower(), repos[name.lower()])
+    return Resolved(
+        tuple(sorted(repos.values(), key=str.lower)), errors, tuple(sorted(listed_by_owners.values(), key=str.lower))
+    )
