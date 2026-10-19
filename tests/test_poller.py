@@ -157,3 +157,66 @@ def test_poll_without_listeners_leaves_notifications_to_the_tray(store: Store) -
     poller.poll()
     assert store.get_setting("notified_once") is None
     assert len(store.take_notifications(NOW)) == 1
+
+
+def two_repo_poller(store: Store, clock: Clock) -> tuple[Poller, FakeGhRunner]:
+    runner = FakeGhRunner({"api user": {"login": "me"}, **empty_repo_routes()})
+    return Poller(Config(repos=("o/a", "o/b")), store, Gh(runner), clock), runner
+
+
+def polled_repos(runner: FakeGhRunner) -> set[str]:
+    return {call[call.index("-R") + 1] for call in runner.calls if "-R" in call}
+
+
+def test_poll_of_some_repositories(store: Store) -> None:
+    clock = Clock()
+    poller, runner = two_repo_poller(store, clock)
+    poller.poll()
+    runner.calls.clear()
+    before = store.get_setting("data_version")
+    poller.poll(["o/b"])
+    assert polled_repos(runner) == {"o/b"}
+    assert store.get_setting("data_version") != before
+    assert poller.last_poll() == NOW
+
+
+def test_touched_repositories_poll_when_the_user_returns(store: Store) -> None:
+    clock = Clock()
+    poller, runner = two_repo_poller(store, clock)
+    assert poller.take_pending() == []
+    poller.touch("o/a")
+    poller.refresh_touched()
+    assert poller.take_pending() == ["o/a"]
+    assert poller.take_pending() == []
+    clock.now = NOW + timedelta(hours=1)
+    poller.refresh_touched()
+    assert poller.take_pending() == []
+
+
+def test_touch_schedules_a_follow_up(store: Store) -> None:
+    poller, _ = two_repo_poller(store, Clock())
+    assert poller.seconds_to_follow_up(0.0) is None
+    poller.touch("o/b", now_monotonic=100.0)
+    assert poller.seconds_to_follow_up(110.0) == 20.0
+    assert poller.take_pending(now_monotonic=110.0) == []
+    assert poller.take_pending(now_monotonic=131.0) == ["o/b"]
+    assert poller.seconds_to_follow_up(131.0) is None
+
+
+def test_background_thread_polls_touched_repositories(store: Store) -> None:
+    clock = Clock()
+    poller, runner = two_repo_poller(store, clock)
+    polled = threading.Event()
+    poller.listeners.append(lambda entries: polled.set() if polled_repos(runner) == {"o/a"} else None)
+    poller.start()
+    try:
+        deadline = 50
+        while poller.last_poll() is None and deadline:
+            threading.Event().wait(0.1)
+            deadline -= 1
+        runner.calls.clear()
+        poller.touch("o/a")
+        poller.refresh_touched()
+        assert polled.wait(5)
+    finally:
+        poller.stop()
