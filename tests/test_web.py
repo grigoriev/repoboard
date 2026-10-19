@@ -376,10 +376,9 @@ def test_opening_an_item_marks_it_seen_and_polls_its_repo_again(client: TestClie
 def test_number_and_title_link_to_github(client: TestClient, poller: Poller) -> None:
     seed(poller)
     page = client.get("/").text
-    assert (
-        '<a href="https://github.com/o/r/issues/1" target="_blank" rel="noopener" data-key="o/r#issue#1">#1</a>' in page
-    )
-    assert 'data-key="o/r#issue#1">Title 1</a>' in page
+    link = '<a href="https://github.com/o/r/issues/1" target="_blank" rel="noopener" data-key="o/r#issue#1"'
+    assert f'{link} data-action="ref">#1</a>' in page
+    assert f'{link} data-action="title">Title 1</a>' in page
     assert '<colgroup><col class="c-repo">' in page
 
 
