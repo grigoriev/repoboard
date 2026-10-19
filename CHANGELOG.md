@@ -13,3 +13,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   GitHub workflow list.
 - Collector over the `gh` CLI: issues, pull requests, discussions and security alerts of each
   repository, with the latest reply by someone else.
+- SQLite store with inbox sections (security, failed, Renovate, new, replies), seen and snooze
+  marks, notification tracking and a per-repository overview.
