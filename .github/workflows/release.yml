@@ -16,6 +16,9 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.14", "3.15"]
+    # uv sync and uv run follow .python-version unless told otherwise. This keeps each leg on its version.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,6 +35,8 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --all-extras
+      - name: Check the Python version of the leg
+        run: uv run python -c 'import os, platform; v = platform.python_version(); assert v.startswith(os.environ["UV_PYTHON"] + "."), v; print(v)'
 
       - name: Type check with mypy
         run: uv run mypy repoboard tests
