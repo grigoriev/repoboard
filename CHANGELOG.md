@@ -36,3 +36,5 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The number of an issue or pull request links to it. Item tables share their column widths.
 - Row actions stay readable in every language: shorter snooze labels with the full text as a hint.
   Column widths are relative, so large text keeps room for the title.
+- `hidden_alert_tools` in the config leaves out the alerts of chosen code scanning tools. Scorecard
+  is hidden by default.

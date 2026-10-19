@@ -287,3 +287,17 @@ def test_discussion_query_reads_replies_in_older_threads() -> None:
     from repoboard.collector import DISCUSSIONS_QUERY
 
     assert "comments(last: 1)" not in DISCUSSIONS_QUERY
+
+
+def test_hidden_alert_tools_are_left_out() -> None:
+    code = {
+        "number": 9,
+        "html_url": "https://github.com/o/r/security/code-scanning/9",
+        "created_at": "2026-10-05T10:00:00Z",
+        "rule": {"description": "Maintained", "severity": "error"},
+        "tool": {"name": "Scorecard"},
+    }
+    codeql = {**code, "number": 10, "tool": {"name": "CodeQL"}}
+    runner = FakeGhRunner({**empty_repo_routes(), "code-scanning/alerts": [[code, codeql]]})
+    collector = Collector(Gh(runner), me="me", hidden_alert_tools=("scorecard",))
+    assert [item.number for item in collector.collect("o/r", SINCE).items] == ["code_scanning/10"]

@@ -75,6 +75,9 @@ item, or send one summary when more than three arrive at once.
 GitHub shows security alerts only to people with admin or security rights on a repository. Where
 Repoboard has no access, the overview shows a dash and the repository page names the reason.
 
+Scorecard findings are about repository hygiene, not vulnerabilities, so Repoboard hides them by
+default. List the tools to hide in `hidden_alert_tools`, or set it to `[]` to see every alert.
+
 ## Notifications on macOS
 
 Clickable native notifications need an app bundle. Started from the terminal, Repoboard notifies

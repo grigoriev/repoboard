@@ -85,7 +85,8 @@ class Poller:
             self._me = self.gh.viewer_login()
         since = now - timedelta(days=self.config.lookback_days)
         targets = list(self.config.repos) if repos is None else [r for r in repos if r in self.config.repos]
-        snapshots = Collector(self.gh, self._me).collect_all(targets, since)
+        collector = Collector(self.gh, self._me, self.config.hidden_alert_tools)
+        snapshots = collector.collect_all(targets, since)
         self.store.save_snapshots(snapshots, now)
         if repos is None:
             self.store.forget_repos_except(self.config.repos)

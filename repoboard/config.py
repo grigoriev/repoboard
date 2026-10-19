@@ -34,6 +34,9 @@ class Config:
     lookback_days: int = 14
     port: int = 8765
     database: Path = field(default=DEFAULT_DATABASE_PATH)
+    # Code scanning tools whose alerts stay out of Repoboard. Scorecard reports repository hygiene, not
+    # vulnerabilities, and fills the security section of every repository with the same few findings.
+    hidden_alert_tools: tuple[str, ...] = ("Scorecard",)
 
 
 def config_path() -> Path:
@@ -64,6 +67,9 @@ def parse(data: dict[str, object]) -> Config:
     if language not in LANGUAGES:
         raise ConfigError(f"language must be one of {', '.join(LANGUAGES)}")
     database = data.get("database")
+    hidden = data.get("hidden_alert_tools", list(defaults.hidden_alert_tools))
+    if not isinstance(hidden, list) or not all(isinstance(tool, str) for tool in hidden):
+        raise ConfigError("hidden_alert_tools must be a list of tool names")
     return Config(
         repos=tuple(dict.fromkeys(repos)),
         language=str(language),
@@ -71,6 +77,7 @@ def parse(data: dict[str, object]) -> Config:
         lookback_days=_positive_int(data, "lookback_days", defaults.lookback_days),
         port=_port(data, defaults.port),
         database=Path(database).expanduser() if isinstance(database, str) else defaults.database,
+        hidden_alert_tools=tuple(hidden),
     )
 
 
@@ -96,6 +103,7 @@ def dump(config: Config) -> str:
         f"lookback_days = {config.lookback_days}\n"
         f"port = {config.port}\n"
         f"database = {json.dumps(str(config.database))}\n"
+        f"hidden_alert_tools = {json.dumps(list(config.hidden_alert_tools))}\n"
         f"repos = [\n{repos}]\n"
     )
 

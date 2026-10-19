@@ -16,6 +16,10 @@ port = 8765
 # SQLite database with the snapshots and the seen marks.
 database = "~/.local/state/repoboard/repoboard.sqlite3"
 
+# Code scanning tools whose alerts Repoboard leaves out. Scorecard reports repository hygiene,
+# not vulnerabilities. Set it to [] to see every alert.
+hidden_alert_tools = ["Scorecard"]
+
 # Repositories to watch, as "owner/name".
 repos = [
     "grigoriev/repoboard",

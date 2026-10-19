@@ -10,6 +10,15 @@ from repoboard.config import Config, ConfigError
 
 def test_missing_file_gives_defaults(tmp_path: Path) -> None:
     assert config.load(tmp_path / "none.toml") == Config()
+    assert Config().hidden_alert_tools == ("Scorecard",)
+
+
+def test_hidden_alert_tools(tmp_path: Path) -> None:
+    path = tmp_path / "c.toml"
+    path.write_text('hidden_alert_tools = ["Scorecard", "SonarCloud"]\n')
+    assert config.load(path).hidden_alert_tools == ("Scorecard", "SonarCloud")
+    path.write_text("hidden_alert_tools = []\n")
+    assert config.load(path).hidden_alert_tools == ()
 
 
 def test_load_full(tmp_path: Path) -> None:
@@ -45,6 +54,8 @@ def test_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         {"port": 70000},
         {"port": "80"},
         {"poll_interval_minutes": True},
+        {"hidden_alert_tools": "Scorecard"},
+        {"hidden_alert_tools": [1]},
     ],
 )
 def test_invalid(data: dict[str, object]) -> None:
@@ -60,7 +71,13 @@ def test_invalid_toml(tmp_path: Path) -> None:
 
 
 def test_save_round_trip(tmp_path: Path) -> None:
-    original = Config(repos=("a/b", "c/d"), language="ru", port=1234, database=tmp_path / 'we"ird\\db')
+    original = Config(
+        repos=("a/b", "c/d"),
+        language="ru",
+        port=1234,
+        database=tmp_path / 'we"ird\\db',
+        hidden_alert_tools=("Scorecard", 'Sonar "Cloud"'),
+    )
     path = tmp_path / "sub" / "c.toml"
     config.save(original, path)
     assert config.load(path) == original
