@@ -275,3 +275,59 @@ def test_app_path_adds_homebrew(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
     assert macos.app_path("/usr/bin:/bin") == f"{brew}:/usr/bin:/bin"
     assert macos.app_path(f"/usr/bin:{brew}") == f"/usr/bin:{brew}"
     assert macos.app_path("") == str(brew)
+
+
+def test_badge_icon_draws_the_count() -> None:
+    from PIL import Image
+
+    from repoboard.tray import badge_icon
+
+    plain = badge_icon("")
+    badged = badge_icon("7")
+    assert plain.size == badged.size == (64, 64)
+    assert isinstance(plain, Image.Image)
+    assert plain.tobytes() != badged.tobytes()
+    assert badge_icon("123").tobytes() != badged.tobytes()
+
+
+def test_menu_entries_follow_the_state(poller: Poller) -> None:
+    from repoboard.tray import menu_entries
+
+    entries = menu_entries(tray_state(poller, Translator("ru")))
+    assert entries[0] == ("Непросмотрено", None)
+    assert ("Открыть Repoboard", "open") in entries
+    assert ("Обновить сейчас", "refresh") in entries
+    assert entries[-1] == ("Выход", "quit")
+    assert ("Новые ответы: 0", "open") in entries
+
+
+def test_window_falls_back_to_the_browser_when_no_gui_starts() -> None:
+    opened: list[str] = []
+
+    def no_gui() -> None:
+        raise RuntimeError("You must have either QT or GTK with Python extensions installed")
+
+    window.start_or_browse(no_gui, "http://x/", opened.append)
+    assert opened == ["http://x/"]
+    window.start_or_browse(lambda: None, "http://x/", opened.append)
+    assert opened == ["http://x/"]
+
+
+@pytest.mark.parametrize(
+    ("platform", "has_gi", "hint"),
+    [("linux", False, True), ("linux", True, False), ("win32", False, False)],
+)
+def test_linux_tray_hint(monkeypatch: pytest.MonkeyPatch, platform: str, has_gi: bool, hint: bool) -> None:
+    from repoboard import tray
+
+    monkeypatch.setattr("sys.platform", platform)
+    monkeypatch.setattr("importlib.util.find_spec", lambda name: object() if has_gi else None)
+    assert (tray.linux_tray_hint() is not None) is hint
+
+
+def test_only_the_open_entry_is_the_default(poller: Poller) -> None:
+    from repoboard.tray import default_entry, menu_entries
+
+    entries = menu_entries(tray_state(poller, Translator()))
+    defaults = [label for label, action in entries if default_entry(label, action, tray_state(poller, Translator()))]
+    assert defaults == ["Open Repoboard"]

@@ -45,3 +45,4 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Notifications fall back to terminal-notifier, which opens the item on a click, when macOS does not
   allow native notifications.
 - Row actions are icon buttons: seen, snooze one day and snooze one week. The full text is a hint.
+- `repoboard tray` runs in the Windows and Linux tray, with the unseen count as a badge on the icon.

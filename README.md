@@ -33,7 +33,11 @@ with Cmd or Ctrl and +, - or 0.
 
 - Python 3.14 and [uv](https://docs.astral.sh/uv/)
 - [GitHub CLI](https://cli.github.com/), logged in: `gh auth login`
-- macOS for the menu bar. On other systems use `repoboard serve`.
+- macOS, Windows or Linux. The tray needs a desktop with a system tray; `repoboard serve` runs
+  anywhere. On Linux the tray menu needs PyGObject, which builds against the system GTK and
+  AppIndicator: install those (`libgirepository1.0-dev`, `gir1.2-ayatanaappindicator3-0.1` on
+  Debian and Ubuntu) and then `uv tool install "repoboard[linux] @ git+https://github.com/grigoriev/repoboard"`.
+  Without a native window toolkit the window opens in the browser.
 
 ## Install
 
@@ -75,6 +79,7 @@ repoboard import-alfred
 | Command | Effect |
 |---|---|
 | `repoboard` | Menu bar app on macOS: polls, notifies, opens the window. |
+| `repoboard tray` | The same in the Windows or Linux tray, with the unseen count as a badge. |
 | `repoboard serve` | Polls and serves the UI on `http://127.0.0.1:8765/` in the browser. |
 | `repoboard poll` | Polls once and prints the number of items per section. |
 | `repoboard import-alfred` | Adds the repositories of the Alfred GitHub workflow to the config. |

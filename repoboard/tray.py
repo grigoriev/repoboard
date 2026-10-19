@@ -1,14 +1,24 @@
-"""Menu bar icon: unseen count, inbox sections, refresh and quit. The model is plain Python; rumps draws it."""
+"""Tray icon: unseen count, inbox sections, refresh and quit.
+
+The model is plain Python. rumps draws it in the macOS menu bar, pystray in the Windows and Linux tray.
+"""
 
 from __future__ import annotations
 
+import importlib.util
+import logging
+import sys
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import resources
+from typing import Any
 
 from repoboard.i18n import Translator
 from repoboard.poller import Poller
 from repoboard.triage import Section
+
+log = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 5
 
@@ -42,11 +52,105 @@ def tray_state(poller: Poller, t: Translator) -> TrayState:
     )
 
 
+Entry = tuple[str, str | None]  # label and action: "open", "refresh", "quit", or None for plain text
+SEPARATOR: Entry = ("-", None)
+BADGE_SIZE = 64
+
+
+def menu_entries(state: TrayState) -> list[Entry]:
+    return [
+        (state.labels["unseen"], None),
+        *((f"{label}: {count}", "open") for label, count in state.sections),
+        SEPARATOR,
+        (state.labels["open"], "open"),
+        (state.labels["refresh"], "refresh"),
+        (state.status, None),
+        SEPARATOR,
+        (state.labels["quit"], "quit"),
+    ]
+
+
+def default_entry(label: str, action: str | None, state: TrayState) -> bool:
+    """pystray runs the default entry on a click on the icon. Only "Open Repoboard" is it."""
+    return action == "open" and label == state.labels["open"]
+
+
 def icon_path() -> str:
     return str(resources.files("repoboard") / "resources" / "tray.png")
 
 
+def badge_icon(count: str) -> Any:
+    """The app icon with the unseen count in a red badge. Tray icons on Windows and Linux show no text."""
+    from PIL import Image, ImageDraw, ImageFont
+
+    path = resources.files("repoboard") / "resources" / "icon.png"
+    image = Image.open(str(path)).convert("RGBA").resize((BADGE_SIZE, BADGE_SIZE))
+    if count:
+        draw = ImageDraw.Draw(image)
+        draw.ellipse((28, 0, 63, 35), fill=(197, 48, 48, 255))
+        font = ImageFont.load_default(size=22 if len(count) < 3 else 16)
+        draw.text((45.5, 17.5), count, fill="white", font=font, anchor="mm")
+    return image
+
+
 def run_tray(
+    poller: Poller, translator: Callable[[], Translator], open_window: Callable[[], None], on_quit: Callable[[], None]
+) -> None:  # pragma: no cover - needs a desktop tray
+    if sys.platform == "darwin":
+        run_menu_bar(poller, translator, open_window, on_quit)
+    else:
+        run_system_tray(poller, translator, open_window, on_quit)
+
+
+def linux_tray_hint() -> str | None:
+    """Without PyGObject pystray falls back to its xorg backend, which shows no menu on Linux."""
+    if sys.platform.startswith("linux") and importlib.util.find_spec("gi") is None:
+        return "the tray has no menu without PyGObject: install repoboard with the linux extra"
+    return None
+
+
+def run_system_tray(
+    poller: Poller, translator: Callable[[], Translator], open_window: Callable[[], None], on_quit: Callable[[], None]
+) -> None:  # pragma: no cover - needs the Windows or Linux tray
+    import pystray
+
+    hint = linux_tray_hint()
+    if hint:
+        log.warning(hint)
+    actions = {"open": open_window, "refresh": poller.refresh}
+    stopped = threading.Event()
+
+    def quit_app(icon: Any) -> None:
+        stopped.set()
+        on_quit()
+        icon.stop()
+
+    def item(label: str, action: str | None, state: TrayState) -> Any:
+        if label == SEPARATOR[0]:
+            return pystray.Menu.SEPARATOR
+        if action == "quit":
+            return pystray.MenuItem(label, lambda icon, _: quit_app(icon))
+        if action:
+            run = actions[action]
+            return pystray.MenuItem(label, lambda _icon, _item: run(), default=default_entry(label, action, state))
+        return pystray.MenuItem(label, None, enabled=False)
+
+    def items() -> Any:
+        state = tray_state(poller, translator())
+        return [item(label, action, state) for label, action in menu_entries(state)]
+
+    def refresh(icon: Any) -> None:
+        icon.visible = True
+        while not stopped.wait(REFRESH_SECONDS if icon.visible else 0):
+            state = tray_state(poller, translator())
+            icon.icon = badge_icon(state.title)
+            icon.title = f"Repoboard {state.title}".strip()
+            icon.update_menu()
+
+    pystray.Icon("repoboard", badge_icon(""), "Repoboard", menu=pystray.Menu(items)).run(setup=refresh)
+
+
+def run_menu_bar(
     poller: Poller, translator: Callable[[], Translator], open_window: Callable[[], None], on_quit: Callable[[], None]
 ) -> None:  # pragma: no cover - needs the macOS menu bar
     import rumps
@@ -70,19 +174,18 @@ def run_tray(
                 return
             self.signature = state
             self.menu.clear()
-            self.menu.add(rumps.MenuItem(state.labels["unseen"]))
-            for label, count in state.sections:
-                self.menu.add(rumps.MenuItem(f"{label}: {count}", callback=lambda _: open_window()))
-            self.menu.add(rumps.separator)
-            self.menu.add(rumps.MenuItem(state.labels["open"], callback=lambda _: open_window(), key="o"))
-            self.menu.add(rumps.MenuItem(state.labels["refresh"], callback=lambda _: poller.refresh(), key="r"))
-            self.menu.add(rumps.MenuItem(state.status))
-            self.menu.add(rumps.separator)
-            if in_app_bundle():
-                login = rumps.MenuItem(state.labels["open_at_login"], callback=self.toggle_login)
-                login.state = int(opens_at_login())
-                self.menu.add(login)
-            self.menu.add(rumps.MenuItem(state.labels["quit"], callback=self.quit, key="q"))
+            callbacks = {"open": lambda _: open_window(), "refresh": lambda _: poller.refresh(), "quit": self.quit}
+            keys = {state.labels["open"]: "o", state.labels["refresh"]: "r", state.labels["quit"]: "q"}
+            for label, action in menu_entries(state):
+                if label == SEPARATOR[0]:
+                    self.menu.add(rumps.separator)
+                    continue
+                if action == "quit" and in_app_bundle():
+                    login = rumps.MenuItem(state.labels["open_at_login"], callback=self.toggle_login)
+                    login.state = int(opens_at_login())
+                    self.menu.add(login)
+                callback = callbacks.get(action or "")
+                self.menu.add(rumps.MenuItem(label, callback=callback, key=keys.get(label) if callback else None))
 
         def toggle_login(self, item: rumps.MenuItem) -> None:
             set_open_at_login(not item.state)

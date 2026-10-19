@@ -21,7 +21,7 @@ sends desktop notifications. It runs in the macOS menu bar and serves its UI on 
 ## Common Commands
 
 ```sh
-uv sync --all-extras                           # install the dependencies
+uv sync --extra dev --group visual            # install the dependencies
 uv run ruff check .                            # lint
 uv run ruff format --check .                   # format check
 uv run mypy repoboard tests                    # type check
