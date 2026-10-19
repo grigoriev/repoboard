@@ -7,7 +7,7 @@ import pytest
 
 from repoboard.config import LANGUAGES
 from repoboard.i18n import LANGUAGE_NAMES, Translator, catalog
-from repoboard.models import Kind, Tag
+from repoboard.models import AlertSource, Kind, Tag
 from repoboard.triage import Section
 
 PLACEHOLDER = re.compile(r"\{(\w+)\}")
@@ -31,6 +31,7 @@ def test_every_enum_has_a_label() -> None:
         | {f"kind.{k}" for k in Kind}
         | {f"group.{k}" for k in Kind}
         | {f"notify.new.{k}" for k in Kind if k is not Kind.ALERT}
+        | {f"source.{s}" for s in AlertSource}
         | {f"section.{s}" for s in Section}
     )
     assert expected <= keys

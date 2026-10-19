@@ -132,7 +132,7 @@ def test_repo_page(client: TestClient, poller: Poller) -> None:
     seed(poller)
     page = client.get("/repo/o/r").text
     assert "Title 3" in page and "Title 17" in page
-    assert "secret scanning: no access to security alerts" in page
+    assert "Secret scanning: no access to security alerts" in page
     assert "Title 9" not in page
     assert "Could not read the repository: gone" in client.get("/repo/x/y").text
     assert "No open items." in client.get("/repo/x/y").text

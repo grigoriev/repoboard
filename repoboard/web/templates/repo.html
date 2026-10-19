@@ -9,7 +9,7 @@
 {% if row and row.error %}<p class="note error">{{ t("repo.error", error=row.error) }}</p>{% endif %}
 {% if row %}
 {% for source, access in row.security.items() if access.value != "ok" %}
-<p class="note">{{ source.value.replace("_", " ") }}: {{ t("security." ~ access.value) }}</p>
+<p class="note">{{ t("source." ~ source.value) }}: {{ t("security." ~ access.value) }}</p>
 {% endfor %}
 {% endif %}
 {% set ns = namespace(any=false) %}
