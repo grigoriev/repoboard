@@ -71,9 +71,10 @@ def latest_activity(events: Iterable[tuple[str, datetime]], me: str) -> tuple[da
 
 
 class Collector:
-    def __init__(self, gh: Gh, me: str) -> None:
+    def __init__(self, gh: Gh, me: str, hidden_alert_tools: tuple[str, ...] = ()) -> None:
         self.gh = gh
         self.me = me
+        self.hidden_alert_tools = frozenset(tool.lower() for tool in hidden_alert_tools)
 
     def collect_all(
         self, repos: Sequence[str], since: datetime, workers: int = 8, on_done: Callable[[str], None] | None = None
@@ -224,7 +225,8 @@ class Collector:
                 access[source] = {403: Access.NO_ACCESS, 404: Access.DISABLED}.get(exc.status or 0, Access.ERROR)
                 continue
             access[source] = Access.OK
-            items += [alert_item(repo, source, node) for node in nodes]
+            alerts = (alert_item(repo, source, node) for node in nodes)
+            items += [alert for alert in alerts if alert.author.lower() not in self.hidden_alert_tools]
         return items, access
 
 
