@@ -110,3 +110,19 @@ def test_release_calls() -> None:
         ["release", "download", "v1.0.0", "--repo", "a/b", "--pattern", "x.zip", "--dir", "/tmp/d"],
         ["attestation", "verify", "/tmp/d/x.zip", "--repo", "a/b"],
     ]
+
+
+@pytest.mark.parametrize(
+    ("args", "timeout"),
+    [(["release", "download", "v1.0.0"], gh.DOWNLOAD_TIMEOUT_SECONDS), (["api", "user"], gh.TIMEOUT_SECONDS)],
+)
+def test_run_gh_gives_downloads_more_time(monkeypatch: pytest.MonkeyPatch, args: list[str], timeout: int) -> None:
+    seen: dict[str, Any] = {}
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return _completed(0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    gh.run_gh(args)
+    assert seen["timeout"] == timeout

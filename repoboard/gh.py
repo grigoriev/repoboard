@@ -11,6 +11,7 @@ from typing import Any
 Runner = Callable[[Sequence[str]], str]
 
 TIMEOUT_SECONDS = 120
+DOWNLOAD_TIMEOUT_SECONDS = 600  # the app zip is tens of MB
 _HTTP_STATUS = re.compile(r"HTTP (\d{3})")
 
 
@@ -27,8 +28,9 @@ class GhError(RuntimeError):
 
 
 def run_gh(args: Sequence[str]) -> str:
+    timeout = DOWNLOAD_TIMEOUT_SECONDS if list(args[:2]) == ["release", "download"] else TIMEOUT_SECONDS
     try:
-        result = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=TIMEOUT_SECONDS, check=False)
+        result = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=timeout, check=False)
     except FileNotFoundError as exc:
         raise GhError("the GitHub CLI 'gh' is not installed") from exc
     except subprocess.TimeoutExpired as exc:
