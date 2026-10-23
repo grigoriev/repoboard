@@ -398,3 +398,20 @@ def test_menu_offers_the_update(poller: Poller, tmp_path: Path) -> None:
     up.state = UpdateState.FAILED
     assert tray_state(poller, Translator("de"), up).update == ("Update fehlgeschlagen. Erneut versuchen", "update")
     assert ("Update to 0.2.0", "update") not in menu_entries(tray_state(poller, Translator()))
+
+
+def test_swap_starts_only_when_the_update_is_ready(poller: Poller, tmp_path: Path) -> None:
+    from repoboard.tray import swap_when_ready
+    from repoboard.update import Updater, UpdateState
+
+    spawned: list[object] = []
+    up = Updater(
+        Gh(FakeGhRunner({})), poller.store, tmp_path / "Repoboard.app", lambda _: None,
+        spawn=lambda args, **_: spawned.append(args),
+    )  # fmt: skip
+    assert not swap_when_ready(None)
+    assert not swap_when_ready(up)
+    up._work = tmp_path / "work"
+    up.state = UpdateState.READY
+    assert swap_when_ready(up)
+    assert len(spawned) == 1

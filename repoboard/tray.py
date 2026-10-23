@@ -47,6 +47,14 @@ def update_entry(updater: Updater | None, t: Translator) -> Entry | None:
     return t("tray.update", version=updater.available.version), "update"
 
 
+def swap_when_ready(updater: Updater | None) -> bool:
+    """Start the swap once the new app is on disk. The caller quits next: the swap waits for that."""
+    if updater is None or updater.state is not UpdateState.READY:
+        return False
+    updater.swap()
+    return True
+
+
 def tray_state(poller: Poller, t: Translator, updater: Updater | None = None) -> TrayState:
     now = poller.clock()
     inbox = poller.store.inbox(now)
@@ -207,9 +215,7 @@ def run_menu_bar(
             self.update(None)
 
         def update(self, _: object) -> None:
-            if updater and updater.state is UpdateState.READY:
-                # The new app is in place on disk. The swap starts it once this process ends.
-                updater.swap()
+            if swap_when_ready(updater):
                 self.quit(None)
                 return
             state = tray_state(poller, translator(), updater)
@@ -218,9 +224,7 @@ def run_menu_bar(
                 return
             self.signature = state
             self.menu.clear()
-            callbacks = {"refresh": lambda _: poller.refresh(), "quit": self.quit}
-            if updater:
-                callbacks["update"] = lambda _: updater.install()
+            callbacks = {"refresh": lambda _: poller.refresh(), "quit": self.quit, "update": self.install_update}
             keys = {state.labels["open"]: "o", state.labels["refresh"]: "r", state.labels["quit"]: "q"}
             for label, action in menu_entries(state):
                 if label == SEPARATOR[0]:
@@ -237,6 +241,11 @@ def run_menu_bar(
         @staticmethod
         def opener(path: str) -> Callable[[object], None]:
             return lambda _: open_window(path)
+
+        @staticmethod
+        def install_update(_: object) -> None:
+            if updater:
+                updater.install()
 
         def toggle_login(self, item: rumps.MenuItem) -> None:
             set_open_at_login(not item.state)
