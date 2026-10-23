@@ -6,6 +6,8 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-23
+
 ### Added
 
 - Releases carry `Repoboard.app` for Apple silicon. The app finds a new release, notifies once
