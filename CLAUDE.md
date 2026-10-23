@@ -47,6 +47,7 @@ Package `repoboard/`, console entry point `repoboard` (`repoboard.cli:main`):
 - `poller.py`: one poll at a time, a background thread, listeners for new entries
 - `i18n.py` and `locales/*.json`: translations. All catalogs carry the same keys
 - `notify.py`: notification texts and backends (native, terminal-notifier, osascript)
+- `update.py`: finds a newer release, downloads and verifies the app zip, swaps the bundle
 - `tray.py`: menu bar. `window.py`: pywebview window, driven through its stdin
 - `macos.py`: process name and icon, activation policy, open at login. `packaging/`: the app entry point
 - `web/app.py`: routes; `web/settings.py`: the settings page, which saves and applies the config
@@ -83,7 +84,7 @@ Flag these in a pull request:
   package build
 - `bump-version.yml`: manual, writes the version to `pyproject.toml`, `repoboard/__init__.py` and
   `uv.lock`, cuts the changelog section, tags `vX.Y.Z`
-- `release.yml`: on `v*` tags, tests, builds the wheel and sdist, attests provenance, creates the
+- `release.yml`: on `v*` tags, tests, builds the wheel, sdist and the arm64 app zip, attests provenance, creates the
   immutable GitHub release with the notes from `CHANGELOG.md`
 - Renovate updates dependencies and `uv.lock`
 

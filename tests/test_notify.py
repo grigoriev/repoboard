@@ -274,3 +274,14 @@ def test_new_repositories_are_announced() -> None:
     assert recorder.sent == [
         Notification("5 neue Repositories", "acme/r0, acme/r1, acme/r2, …", "http://inbox/overview")
     ]
+
+
+def test_update_is_announced() -> None:
+    from repoboard.update import Release
+
+    recorder = Recorder()
+    release = Release("0.2.0", "https://github.com/grigoriev/repoboard/releases/tag/v0.2.0", "x.zip")
+    NotificationListener(recorder, lambda: Translator("ru"), "http://inbox").update(release)
+    assert recorder.sent == [
+        Notification("Вышел Repoboard 0.2.0", "Выбери «Обновить до 0.2.0» в меню Repoboard.", release.url)
+    ]

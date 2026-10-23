@@ -17,10 +17,15 @@ from typing import Any
 from repoboard.i18n import Translator
 from repoboard.poller import Poller
 from repoboard.triage import Section
+from repoboard.update import Updater, UpdateState
 
 log = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 5
+
+
+# Label and action: "open", "section:<name>", "settings", "refresh", "update", "quit", or None for plain text.
+Entry = tuple[str, str | None]
 
 
 @dataclass(frozen=True)
@@ -29,9 +34,28 @@ class TrayState:
     sections: tuple[tuple[str, str, int], ...]  # name, label and count
     status: str
     labels: dict[str, str]
+    update: Entry | None = None  # the update entry, when a newer app is out
 
 
-def tray_state(poller: Poller, t: Translator) -> TrayState:
+def update_entry(updater: Updater | None, t: Translator) -> Entry | None:
+    if updater is None or updater.available is None:
+        return None
+    if updater.state in (UpdateState.INSTALLING, UpdateState.READY):
+        return t("tray.updating"), None
+    if updater.state is UpdateState.FAILED:
+        return t("tray.update_failed"), "update"
+    return t("tray.update", version=updater.available.version), "update"
+
+
+def swap_when_ready(updater: Updater | None) -> bool:
+    """Start the swap once the new app is on disk. The caller quits next: the swap waits for that."""
+    if updater is None or updater.state is not UpdateState.READY:
+        return False
+    updater.swap()
+    return True
+
+
+def tray_state(poller: Poller, t: Translator, updater: Updater | None = None) -> TrayState:
     now = poller.clock()
     inbox = poller.store.inbox(now)
     total = sum(len(entries) for entries in inbox.values())
@@ -49,11 +73,10 @@ def tray_state(poller: Poller, t: Translator) -> TrayState:
         sections=tuple((section.value, t(f"section.{section}"), len(inbox[section])) for section in Section),
         status=status,
         labels={key: t(f"tray.{key}") for key in ("open", "refresh", "settings", "quit", "unseen", "open_at_login")},
+        update=update_entry(updater, t),
     )
 
 
-# Label and action: "open", "section:<name>", "settings", "refresh", "quit", or None for plain text.
-Entry = tuple[str, str | None]
 SEPARATOR: Entry = ("-", None)
 BADGE_SIZE = 64
 
@@ -67,6 +90,7 @@ def menu_entries(state: TrayState) -> list[Entry]:
         (state.labels["refresh"], "refresh"),
         (state.labels["settings"], "settings"),
         (state.status, None),
+        *((state.update,) if state.update else ()),
         SEPARATOR,
         (state.labels["quit"], "quit"),
     ]
@@ -107,10 +131,14 @@ def badge_icon(count: str) -> Any:
 
 
 def run_tray(
-    poller: Poller, translator: Callable[[], Translator], open_window: Callable[..., None], on_quit: Callable[[], None]
+    poller: Poller,
+    translator: Callable[[], Translator],
+    open_window: Callable[..., None],
+    on_quit: Callable[[], None],
+    updater: Updater | None = None,
 ) -> None:  # pragma: no cover - needs a desktop tray
     if sys.platform == "darwin":
-        run_menu_bar(poller, translator, open_window, on_quit)
+        run_menu_bar(poller, translator, open_window, on_quit, updater)
     else:
         run_system_tray(poller, translator, open_window, on_quit)
 
@@ -166,7 +194,11 @@ def run_system_tray(
 
 
 def run_menu_bar(
-    poller: Poller, translator: Callable[[], Translator], open_window: Callable[..., None], on_quit: Callable[[], None]
+    poller: Poller,
+    translator: Callable[[], Translator],
+    open_window: Callable[..., None],
+    on_quit: Callable[[], None],
+    updater: Updater | None,
 ) -> None:  # pragma: no cover - needs the macOS menu bar
     import rumps
 
@@ -183,13 +215,16 @@ def run_menu_bar(
             self.update(None)
 
         def update(self, _: object) -> None:
-            state = tray_state(poller, translator())
+            if swap_when_ready(updater):
+                self.quit(None)
+                return
+            state = tray_state(poller, translator(), updater)
             self.title = state.title
             if state == self.signature:
                 return
             self.signature = state
             self.menu.clear()
-            callbacks = {"refresh": lambda _: poller.refresh(), "quit": self.quit}
+            callbacks = {"refresh": lambda _: poller.refresh(), "quit": self.quit, "update": self.install_update}
             keys = {state.labels["open"]: "o", state.labels["refresh"]: "r", state.labels["quit"]: "q"}
             for label, action in menu_entries(state):
                 if label == SEPARATOR[0]:
@@ -206,6 +241,11 @@ def run_menu_bar(
         @staticmethod
         def opener(path: str) -> Callable[[object], None]:
             return lambda _: open_window(path)
+
+        @staticmethod
+        def install_update(_: object) -> None:
+            if updater:
+                updater.install()
 
         def toggle_login(self, item: rumps.MenuItem) -> None:
             set_open_at_login(not item.state)

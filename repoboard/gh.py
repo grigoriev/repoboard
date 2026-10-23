@@ -11,6 +11,7 @@ from typing import Any
 Runner = Callable[[Sequence[str]], str]
 
 TIMEOUT_SECONDS = 120
+DOWNLOAD_TIMEOUT_SECONDS = 600  # the app zip is tens of MB
 _HTTP_STATUS = re.compile(r"HTTP (\d{3})")
 
 
@@ -27,8 +28,9 @@ class GhError(RuntimeError):
 
 
 def run_gh(args: Sequence[str]) -> str:
+    timeout = DOWNLOAD_TIMEOUT_SECONDS if list(args[:2]) == ["release", "download"] else TIMEOUT_SECONDS
     try:
-        result = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=TIMEOUT_SECONDS, check=False)
+        result = subprocess.run(["gh", *args], capture_output=True, text=True, timeout=timeout, check=False)
     except FileNotFoundError as exc:
         raise GhError("the GitHub CLI 'gh' is not installed") from exc
     except subprocess.TimeoutExpired as exc:
@@ -62,3 +64,13 @@ class Gh:
 
     def viewer_login(self) -> str:
         return str(self.json(["api", "user"])["login"])
+
+    def latest_release(self, repo: str) -> Any:
+        return self.json(["api", f"repos/{repo}/releases/latest"])
+
+    def download_asset(self, repo: str, tag: str, name: str, directory: str) -> None:
+        self._runner(["release", "download", tag, "--repo", repo, "--pattern", name, "--dir", directory])
+
+    def verify_attestation(self, path: str, repo: str) -> None:
+        """Fail unless the file carries a build provenance attestation of the repository."""
+        self._runner(["attestation", "verify", path, "--repo", repo])
