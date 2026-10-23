@@ -63,8 +63,21 @@ gh release download --repo grigoriev/repoboard --pattern 'Repoboard-*-macos-arm6
 ditto -x -k Repoboard-*-macos-arm64.zip /Applications/
 ```
 
-A zip that a browser downloads gets the quarantine flag, and macOS blocks the app. `gh` sets no
-such flag. Or build the app yourself:
+Use `gh`, not the browser. The app is signed ad hoc and not notarized by Apple. A browser marks the
+download with the quarantine flag, and macOS then refuses to verify the app ("Apple is not able to
+verify..."). `gh` sets no such flag, and the app updates itself through `gh` as well.
+
+Already downloaded it with a browser? Removing the flag skips the check of macOS, so verify the zip
+first, then unpack it and remove the flag:
+
+```sh
+cd ~/Downloads &&
+    gh attestation verify Repoboard-*-macos-arm64.zip --repo grigoriev/repoboard &&
+    ditto -x -k Repoboard-*-macos-arm64.zip /Applications/ &&
+    xattr -dr com.apple.quarantine /Applications/Repoboard.app
+```
+
+Or build the app yourself:
 
 ```sh
 scripts/build-app.sh
