@@ -97,3 +97,16 @@ def test_graphql_passes_integers_typed() -> None:
     runner = FakeRunner('{"data": {}}')
     Gh(runner).graphql("q", name="2048", number=3)
     assert runner.calls == [["api", "graphql", "-f", "query=q", "-f", "name=2048", "-F", "number=3"]]
+
+
+def test_release_calls() -> None:
+    runner = FakeRunner('{"tag_name": "v1.0.0"}')
+    client = Gh(runner)
+    assert client.latest_release("a/b") == {"tag_name": "v1.0.0"}
+    client.download_asset("a/b", "v1.0.0", "x.zip", "/tmp/d")
+    client.verify_attestation("/tmp/d/x.zip", "a/b")
+    assert runner.calls == [
+        ["api", "repos/a/b/releases/latest"],
+        ["release", "download", "v1.0.0", "--repo", "a/b", "--pattern", "x.zip", "--dir", "/tmp/d"],
+        ["attestation", "verify", "/tmp/d/x.zip", "--repo", "a/b"],
+    ]

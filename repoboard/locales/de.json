@@ -137,5 +137,10 @@
   "tray.settings": "Einstellungen…",
   "settings.not_saved": "Nicht gespeichert: {error}",
   "settings.whole_numbers": "Abfrageintervall und Suchtiefe müssen ganze Zahlen sein",
-  "settings.changed": "die Konfiguration hat sich seit dem Öffnen der Seite geändert, zum Beispiel durch ein beobachtetes Element. Prüfe die Felder und speichere erneut"
+  "settings.changed": "die Konfiguration hat sich seit dem Öffnen der Seite geändert, zum Beispiel durch ein beobachtetes Element. Prüfe die Felder und speichere erneut",
+  "tray.update": "Auf {version} aktualisieren",
+  "tray.updating": "Lade das Update…",
+  "tray.update_failed": "Update fehlgeschlagen. Erneut versuchen",
+  "notify.update": "Repoboard {version} ist da",
+  "notify.update_body": "Wähle „Auf {version} aktualisieren“ im Repoboard-Menü."
 }

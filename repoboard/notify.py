@@ -15,6 +15,7 @@ from typing import Protocol
 from repoboard.i18n import Translator
 from repoboard.store import Entry
 from repoboard.triage import Section
+from repoboard.update import Release
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,12 @@ def build_new_repos(repos: Sequence[str], t: Translator, inbox_url: str) -> list
         owner, name = repo.split("/", 1)
         notifications.append(Notification(t("notify.new_repo", owner=owner), name, f"https://github.com/{repo}"))
     return notifications
+
+
+def build_update(release: Release, t: Translator) -> Notification:
+    return Notification(
+        t("notify.update", version=release.version), t("notify.update_body", version=release.version), release.url
+    )
 
 
 def single(entry: Entry, t: Translator) -> Notification:
@@ -181,6 +188,10 @@ class NotificationListener:
     def new_repos(self, repos: list[str]) -> None:
         """Poller repo listener: repositories that appeared under a watched owner."""
         self._send_all(build_new_repos(repos, self.translator(), self.inbox_url))
+
+    def update(self, release: Release) -> None:
+        """Updater callback: a newer Repoboard.app is out."""
+        self._send_all([build_update(release, self.translator())])
 
     def _send_all(self, notifications: list[Notification]) -> None:
         for notification in notifications:

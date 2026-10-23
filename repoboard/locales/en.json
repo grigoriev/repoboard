@@ -137,5 +137,10 @@
   "tray.settings": "Settings…",
   "settings.not_saved": "Not saved: {error}",
   "settings.whole_numbers": "the poll interval and the lookback must be whole numbers",
-  "settings.changed": "the config changed since this page opened, for example by a watched item. Check the fields and save again"
+  "settings.changed": "the config changed since this page opened, for example by a watched item. Check the fields and save again",
+  "tray.update": "Update to {version}",
+  "tray.updating": "Downloading the update…",
+  "tray.update_failed": "Update failed. Try again",
+  "notify.update": "Repoboard {version} is out",
+  "notify.update_body": "Choose \"Update to {version}\" in the Repoboard menu."
 }

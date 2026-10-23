@@ -8,6 +8,9 @@ The project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Releases carry `Repoboard.app` for Apple silicon. The app finds a new release, notifies once
+  and updates itself from the menu: it downloads the zip, verifies its attestation, swaps the
+  bundle and restarts.
 - A section entry in the tray menu, such as "New: 3", opens the inbox at that section, also a
   collapsed one.
 - **Settings…** in the tray menu opens the settings page, also in a window that is already open.

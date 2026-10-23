@@ -55,7 +55,16 @@ Every release carries a signed provenance bundle. Verify a downloaded file with
 
 ### macOS app
 
-Build `Repoboard.app` and move it to `/Applications`:
+Each release carries `Repoboard-<version>-macos-arm64.zip` for Apple silicon. Download it with `gh`
+and move the app to `/Applications`:
+
+```sh
+gh release download --repo grigoriev/repoboard --pattern 'Repoboard-*-macos-arm64.zip'
+ditto -x -k Repoboard-*-macos-arm64.zip /Applications/
+```
+
+A zip that a browser downloads gets the quarantine flag, and macOS blocks the app. `gh` sets no
+such flag. Or build the app yourself:
 
 ```sh
 scripts/build-app.sh
@@ -64,6 +73,10 @@ mv dist/Repoboard.app /Applications/
 
 The app lives in the menu bar. Its menu has **Open at login**. The build is signed ad hoc, not
 with an Apple Developer ID, so macOS asks once whether Repoboard may send notifications.
+
+The app looks for a new release at start and every 6 hours. It sends one notification per new
+version, and the menu shows **Update to X.Y.Z**. That entry downloads the zip through `gh`,
+verifies its provenance attestation, replaces the app and starts the new version.
 
 ## Configure
 

@@ -380,3 +380,21 @@ def test_menu_page_per_action() -> None:
     assert menu_page("refresh") is None
     assert menu_page("quit") is None
     assert menu_page(None) is None
+
+
+def test_menu_offers_the_update(poller: Poller, tmp_path: Path) -> None:
+    from repoboard.tray import menu_entries
+    from repoboard.update import Release, Updater, UpdateState
+
+    up = Updater(Gh(FakeGhRunner({})), poller.store, tmp_path / "Repoboard.app", lambda _: None)
+    assert tray_state(poller, Translator(), up).update is None
+    up.available = Release("0.2.0", "u", "x.zip")
+    entries = menu_entries(tray_state(poller, Translator(), up))
+    assert entries.index(("Update to 0.2.0", "update")) < entries.index(("Quit", "quit"))
+    up.state = UpdateState.INSTALLING
+    assert tray_state(poller, Translator(), up).update == ("Downloading the update…", None)
+    up.state = UpdateState.READY
+    assert tray_state(poller, Translator(), up).update == ("Downloading the update…", None)
+    up.state = UpdateState.FAILED
+    assert tray_state(poller, Translator("de"), up).update == ("Update fehlgeschlagen. Erneut versuchen", "update")
+    assert ("Update to 0.2.0", "update") not in menu_entries(tray_state(poller, Translator()))

@@ -154,6 +154,7 @@ def tray(cfg: config.Config) -> int:  # pragma: no cover - needs the macOS menu 
     from repoboard.i18n import Translator
     from repoboard.notify import NotificationListener, default_notifier
     from repoboard.tray import run_tray
+    from repoboard.update import app_updater
     from repoboard.web.app import create_app
     from repoboard.window import Window
 
@@ -178,6 +179,11 @@ def tray(cfg: config.Config) -> int:  # pragma: no cover - needs the macOS menu 
     def stop_server() -> None:
         server.should_exit = True
 
-    run_tray(poller, translator, window.open, quit_sequence(window.close, poller.stop, stop_server))
+    updater = app_updater(store, notifications.update)
+    if updater:
+        updater.start()
+    run_tray(poller, translator, window.open, quit_sequence(window.close, poller.stop, stop_server), updater)
+    if updater:
+        updater.stop()
     store.close()
     return 0

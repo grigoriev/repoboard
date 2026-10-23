@@ -62,3 +62,13 @@ class Gh:
 
     def viewer_login(self) -> str:
         return str(self.json(["api", "user"])["login"])
+
+    def latest_release(self, repo: str) -> Any:
+        return self.json(["api", f"repos/{repo}/releases/latest"])
+
+    def download_asset(self, repo: str, tag: str, name: str, directory: str) -> None:
+        self._runner(["release", "download", tag, "--repo", repo, "--pattern", name, "--dir", directory])
+
+    def verify_attestation(self, path: str, repo: str) -> None:
+        """Fail unless the file carries a build provenance attestation of the repository."""
+        self._runner(["attestation", "verify", path, "--repo", repo])
