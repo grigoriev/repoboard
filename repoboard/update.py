@@ -148,7 +148,7 @@ class Updater:
             archive.unlink()
             if not (work / APP_NAME).is_dir():
                 raise OSError(f"{release.asset} holds no {APP_NAME}")
-        except (GhError, OSError, subprocess.CalledProcessError) as exc:
+        except Exception as exc:  # any failure must leave a state the user can retry from
             log.warning("update to %s failed: %s", release.version, exc)
             if work:
                 shutil.rmtree(work, ignore_errors=True)
@@ -174,7 +174,10 @@ class Updater:
 
     def _run(self) -> None:
         while True:
-            self.check()
+            try:
+                self.check()
+            except Exception:  # an unexpected failure must not end the background loop
+                log.exception("update check failed")
             if self._stop.wait(CHECK_SECONDS):
                 return
 

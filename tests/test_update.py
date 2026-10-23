@@ -252,3 +252,29 @@ def test_app_updater(store: Store, tmp_path: Path, monkeypatch: pytest.MonkeyPat
     made = app_updater(store, print, executable)
     assert made is not None
     assert made.bundle == (tmp_path / APP_NAME).resolve()
+
+
+def test_check_loop_survives_an_unexpected_error(
+    store: Store, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    def broken(_: list[str]) -> Any:
+        raise ValueError("not json")
+
+    up, _ = updater(store, tmp_path, {"releases/latest": broken})
+    up.stop()
+    up.start()
+    for thread in threading.enumerate():
+        if thread.name == "repoboard-update-check":
+            thread.join()
+    assert "update check failed" in caplog.text
+
+
+def test_prepare_unexpected_error_allows_a_retry(store: Store, tmp_path: Path) -> None:
+    def broken(*_: Any, **__: Any) -> None:
+        raise RuntimeError("boom")
+
+    up, _ = updater(store, tmp_path, {"release download": download, "attestation verify": ""}, run=broken)
+    up.available = RELEASE
+    up.prepare()
+    assert up.state is UpdateState.FAILED
+    assert [path.name for path in up.bundle.parent.iterdir()] == [APP_NAME]
