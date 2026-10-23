@@ -71,9 +71,9 @@ Already downloaded it with a browser? Removing the flag skips the check of macOS
 first, then unpack it and remove the flag:
 
 ```sh
-gh attestation verify Repoboard-*-macos-arm64.zip --repo grigoriev/repoboard
-ditto -x -k Repoboard-*-macos-arm64.zip /Applications/
-xattr -dr com.apple.quarantine /Applications/Repoboard.app
+gh attestation verify Repoboard-*-macos-arm64.zip --repo grigoriev/repoboard &&
+    ditto -x -k Repoboard-*-macos-arm64.zip /Applications/ &&
+    xattr -dr com.apple.quarantine /Applications/Repoboard.app
 ```
 
 Or build the app yourself:
